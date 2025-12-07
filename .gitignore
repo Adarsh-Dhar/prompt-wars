@@ -1,0 +1,82 @@
+# Dependencies
+/frontend/node_modules/
+/frontend/.pnp
+/frontend/.pnp.js
+
+# Testing
+/frontend/coverage/
+/frontend/.nyc_output
+
+# Next.js
+/frontend/.next/
+/frontend/out/
+/frontend/build/
+/frontend/dist/
+
+# Production
+/frontend/*.log
+/frontend/*.log.*
+
+# Misc
+/frontend/.DS_Store
+/frontend/*.pem
+
+# Debug
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+/frontend/lerna-debug.log*
+
+# Local env files
+/frontend/.env
+/frontend/.env*.local
+/frontend/.env.development.local
+/frontend/.env.test.local
+/frontend/.env.production.local
+
+# Vercel
+/frontend/.vercel
+
+# TypeScript
+/frontend/*.tsbuildinfo
+/frontend/next-env.d.ts
+
+# IDE
+/frontend/.idea/
+/frontend/.vscode/
+/frontend/*.swp
+/frontend/*.swo
+/frontend/*~
+/frontend/.project
+/frontend/.classpath
+/frontend/.settings/
+/frontend/*.sublime-project
+/frontend/*.sublime-workspace
+
+# OS
+/frontend/.DS_Store
+/frontend/.DS_Store?
+/frontend/._*
+/frontend/.Spotlight-V100
+/frontend/.Trashes
+/frontend/ehthumbs.db
+/frontend/Thumbs.db
+
+# pnpm
+/frontend/.pnpm-store/
+/frontend/.pnpm-debug.log*
+
+# Turbo
+/frontend/.turbo
+
+# Agent
+/prompt-wars-agent/node_modules/
+/prompt-wars-agent/.pnp
+/prompt-wars-agent/.pnp.js
+/prompt-wars-agent/coverage/
+/prompt-wars-agent/.nyc_output
+/prompt-wars-agent/.next/
+/prompt-wars-agent/out/
+/prompt-wars-agent/build/
+/prompt-wars-agent/dist/
