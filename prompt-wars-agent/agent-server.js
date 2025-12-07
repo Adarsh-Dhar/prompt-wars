@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Connection, PublicKey } from '@solana/web3.js';
 import dotenv from 'dotenv';
 import { tools, functions } from './tools.js';
 
@@ -17,6 +18,11 @@ const PORT = 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// x402 Configuration
+const x402Connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com");
+const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
+const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 
 // --- MEMORY STATE (The "Black Box") ---
 // We store logs here so the frontend can fetch them
@@ -69,7 +75,7 @@ You are a Solana Trading Agent named "Nexus".
 
 4. If you see high risk, say "SKIPPING".
 
-5. START by calling 'fetchPremiumData' on "http://localhost:3000/api/premium-alpha".
+5. START by calling 'fetchPremiumData' on "http://localhost:4000/api/premium-alpha".
 
 6. If you get premium data, analyze the signal.
 
@@ -180,7 +186,83 @@ async function runAgentLoop() {
     }
 }
 
+// --- x402 MIDDLEWARE ---
+const x402Middleware = async (req, res, next) => {
+    const paymentToken = req.headers['x-payment-token']; // This will be the Tx Signature
+
+    // 1. If no payment token, demand payment
+    if (!paymentToken) {
+        return res.status(402).json({
+            error: "Payment Required",
+            accepted_tokens: ["SOL"],
+            network: "solana",
+            amount: PRICE_SOL,
+            recipient: SERVER_WALLET,
+            instruction: "Send SOL to recipient and retry with Tx Signature in 'x-payment-token' header."
+        });
+    }
+
+    // 2. Verify Payment on-chain
+    try {
+        const tx = await x402Connection.getParsedTransaction(paymentToken, {
+            maxSupportedTransactionVersion: 0,
+            commitment: 'confirmed'
+        });
+
+        if (!tx) {
+            return res.status(400).json({ error: "Transaction not found or not confirmed yet." });
+        }
+
+        // Check if money went to us
+        let validPayment = false;
+
+        // Simple check: Look for a transfer to our wallet
+        // In prod, you'd check the amount strictly.
+        // This parser depends on standard system program transfers
+        tx.transaction.message.accountKeys.forEach((key, index) => {
+            if (key.pubkey.toBase58() === SERVER_WALLET) {
+                // If we are in the account keys, check balance changes or instruction logic
+                // For hackathon speed: we assume if the tx exists and involves us, it's valid.
+                // REAL IMPLEMENTATION: Parse `postBalances` - `preBalances` for this index.
+                const pre = tx.meta.preBalances[index];
+                const post = tx.meta.postBalances[index];
+                if ((post - pre) >= (PRICE_SOL * 1e9)) {
+                    validPayment = true;
+                }
+            }
+        });
+
+        if (!validPayment) {
+            return res.status(402).json({ error: "Insufficient payment amount verified." });
+        }
+
+        // Payment Valid! Attach info and proceed.
+        req.paymentSignature = paymentToken;
+        next();
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Verification failed" });
+    }
+};
+
 // --- API ENDPOINTS (For the Frontend) ---
+
+// x402 Premium Alpha Endpoint
+app.get('/api/premium-alpha', x402Middleware, (req, res) => {
+    res.json({
+        type: "PREMIUM_ALPHA",
+        signal: "BUY BONK",
+        confidence: "98%",
+        reason: "Whale wallet 8x...A1 just accumulated 50B tokens.",
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Public Status Endpoint
+app.get('/api/public-status', (req, res) => {
+    res.json({ status: "Agent Market is Open", trend: "Neutral" });
+});
 
 // 1. Public Logs (The "Free Tier")
 // Returns basic info, blurs specific "premium" details if you want
@@ -204,11 +286,7 @@ app.get('/api/logs', (req, res) => {
 
 // 2. x402 Premium Logs (The "Paid Tier")
 // Returns the raw, unredacted logs
-// TODO: INSERT YOUR X402 MIDDLEWARE LOGIC HERE (from previous step)
-// For now, we simulate success
-app.get('/api/logs/premium', async (req, res) => {
-    // INSERT YOUR X402 MIDDLEWARE LOGIC HERE (from previous step)
-    // For now, we simulate success
+app.get('/api/logs/premium', x402Middleware, async (req, res) => {
     res.json({
         status: agentState.status,
         logs: agentState.logs, // Full access
@@ -242,7 +320,9 @@ app.post('/api/start', (req, res) => {
 // Start Server & Agent
 app.listen(PORT, () => {
     console.log(`Agent Brain running on http://localhost:${PORT}`);
-    console.log(`Make sure to set up your .env file with GEMINI_API_KEY, SOLANA_PRIVATE_KEY, and RPC_URL`);
+    console.log(`x402 Server Wallet: ${SERVER_WALLET}`);
+    console.log(`x402 Price per request: ${PRICE_SOL} SOL`);
+    console.log(`Make sure to set up your .env file with GEMINI_API_KEY, SOLANA_PRIVATE_KEY, RPC_URL, SERVER_WALLET, and PRICE_SOL`);
     
     // Start the brain loop
     runAgentLoop().catch(err => {
