@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { NavBar } from "@/components/nav-bar"
 import { Footer } from "@/components/footer"
+import { WalletContextProvider } from "@/components/wallet-provider"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -44,10 +45,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="font-sans antialiased min-h-screen flex flex-col">
-        <NavBar />
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <Analytics />
+        <WalletContextProvider>
+          <NavBar />
+          <main className="flex-1">{children}</main>
+          <Footer />
+          <Analytics />
+        </WalletContextProvider>
       </body>
     </html>
   )

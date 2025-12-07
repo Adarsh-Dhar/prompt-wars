@@ -5,6 +5,8 @@ import { ArrowUp, ArrowDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useWallet } from "@solana/wallet-adapter-react"
+import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 
 interface PredictionMarketProps {
   market?: any
@@ -12,6 +14,8 @@ interface PredictionMarketProps {
 }
 
 export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
+  const { publicKey, connected } = useWallet()
+  const { setVisible } = useWalletModal()
   const [trades, setTrades] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [shares, setShares] = useState("")
@@ -40,9 +44,13 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
   const handleBet = async (position: "MOON" | "RUG") => {
     if (!market?.id || !shares || parseInt(shares) <= 0) return
 
-    // Get wallet from localStorage or prompt user
-    const walletAddress = localStorage.getItem("walletAddress") || prompt("Enter your wallet address:")
-    if (!walletAddress) return
+    // Check if wallet is connected
+    if (!connected || !publicKey) {
+      setVisible(true)
+      return
+    }
+
+    const walletAddress = publicKey.toBase58()
 
     try {
       setBetting(true)
@@ -97,6 +105,21 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 p-4">
+        {/* Wallet connection prompt */}
+        {!connected && (
+          <div className="mb-4 rounded border border-[var(--neon-cyan)]/50 bg-[var(--neon-cyan)]/10 p-3 text-center">
+            <p className="font-mono text-xs text-[var(--neon-cyan)] mb-2">
+              Connect your wallet to place bets
+            </p>
+            <Button
+              onClick={() => setVisible(true)}
+              className="neon-glow-cyan border border-[var(--neon-cyan)] bg-transparent font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/10"
+            >
+              Connect Wallet
+            </Button>
+          </div>
+        )}
+
         {/* Shares input */}
         <div className="mb-4">
           <Input
@@ -106,6 +129,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
             onChange={(e) => setShares(e.target.value)}
             className="font-mono text-sm"
             min="1"
+            disabled={!connected}
           />
         </div>
 
@@ -114,7 +138,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
           {/* MOON Button */}
           <Button
             onClick={() => handleBet("MOON")}
-            disabled={betting || !shares || parseInt(shares) <= 0}
+            disabled={betting || !shares || parseInt(shares) <= 0 || !connected}
             className="group relative h-24 flex-col gap-1 overflow-hidden border-2 border-[var(--neon-green)] bg-[var(--neon-green)]/10 transition-all hover:bg-[var(--neon-green)]/20 hover:shadow-[0_0_30px_rgba(0,255,100,0.3)]"
           >
             <ArrowUp className="h-6 w-6 text-[var(--neon-green)] transition-transform group-hover:-translate-y-1" />
@@ -127,7 +151,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
           {/* RUG Button */}
           <Button
             onClick={() => handleBet("RUG")}
-            disabled={betting || !shares || parseInt(shares) <= 0}
+            disabled={betting || !shares || parseInt(shares) <= 0 || !connected}
             className="group relative h-24 flex-col gap-1 overflow-hidden border-2 border-[var(--neon-red)] bg-[var(--neon-red)]/10 transition-all hover:bg-[var(--neon-red)]/20 hover:shadow-[0_0_30px_rgba(255,50,50,0.3)]"
           >
             <ArrowDown className="h-6 w-6 text-[var(--neon-red)] transition-transform group-hover:translate-y-1" />
