@@ -57,6 +57,9 @@ model User {
   trades Trade[]
 
   @@index([walletAddress])
+  @@index([totalWinnings])
+  @@index([winRate])
+  @@index([totalBets])
 }
 
 model Agent {

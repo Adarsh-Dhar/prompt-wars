@@ -99,7 +99,7 @@ export default async function HomePage() {
                 size="lg"
                 className="neon-glow-cyan border border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 font-mono text-sm uppercase tracking-widest text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/20"
               >
-                <Link href="/arena/agent-1">
+                <Link href="/arena">
                   Enter Arena
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>

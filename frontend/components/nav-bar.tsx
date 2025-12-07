@@ -61,7 +61,7 @@ export function NavBar() {
         {/* Navigation Links */}
         <div className="hidden items-center gap-8 md:flex">
           <Link
-            href="/arena/agent-1"
+            href="/arena"
             className="font-mono text-sm uppercase tracking-widest text-muted-foreground transition-colors hover:text-[var(--neon-cyan)]"
           >
             Arena
@@ -73,7 +73,7 @@ export function NavBar() {
             Markets
           </Link>
           <Link
-            href="#"
+            href="/leaderboard"
             className="font-mono text-sm uppercase tracking-widest text-muted-foreground transition-colors hover:text-[var(--neon-cyan)]"
           >
             Leaderboard

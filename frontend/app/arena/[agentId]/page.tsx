@@ -14,7 +14,11 @@ async function getArenaData(agentId: string) {
         "Content-Type": "application/json",
       }
     })
-    if (!res.ok) throw new Error("Failed to fetch arena data")
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      console.error(`Failed to fetch arena data: ${res.status} ${res.statusText}`, errorData)
+      throw new Error(`Failed to fetch arena data: ${res.status} ${errorData.error || res.statusText}`)
+    }
     return await res.json()
   } catch (error) {
     console.error("Error fetching arena data:", error)

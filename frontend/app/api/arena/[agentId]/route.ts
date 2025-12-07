@@ -28,6 +28,9 @@ export async function GET(
                   },
                 },
                 trades: {
+                  include: {
+                    user: true,
+                  },
                   orderBy: {
                     timestamp: "desc",
                   },
