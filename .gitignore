@@ -80,3 +80,10 @@
 /prompt-wars-agent/out/
 /prompt-wars-agent/build/
 /prompt-wars-agent/dist/
+/prompt-wars-agent/.env
+/prompt-wars-agent/.env*.local
+
+# x402 Server
+/x402-server/node_modules/
+/x402-server/.env
+/x402-server/.env*.local

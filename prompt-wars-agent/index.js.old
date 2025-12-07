@@ -1,0 +1,188 @@
+import express from 'express';
+import cors from 'cors';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+import { tools, functions } from './tools.js';
+
+dotenv.config();
+
+if (!process.env.GEMINI_API_KEY) {
+    console.error('ERROR: GEMINI_API_KEY is not set in .env file');
+    process.exit(1);
+}
+
+const app = express();
+const PORT = 4000;
+
+app.use(cors());
+app.use(express.json());
+
+// --- AGENT STATE ---
+let gameState = {
+    mission: "Autonomous Hedge Fund - Find Alpha and Trade",
+    status: "IDLE", // IDLE, ACTIVE, SUCCESS, FAILED
+    logs: [],
+    startTime: null,
+    endTime: null
+};
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// System Instruction: The "Personality" and Rules
+const systemInstruction = `
+You are an Autonomous Hedge Fund Agent.
+
+1. Your goal is to find Alpha signals and trade on them.
+
+2. START by calling 'fetchPremiumData' on "http://localhost:3000/api/premium-alpha".
+
+3. If you get premium data, analyze the signal.
+
+4. If the signal says BUY, use 'executeSwap' to buy the token mentioned.
+
+5. Always check your balance before spending.
+
+6. Trade small amounts (e.g., 0.001 SOL) for safety.
+
+7. Speak like a crypto degent (use slang like "sending it", "LFG", "bag secured").
+`;
+
+function addLog(text, type = "public") {
+    const log = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        text: text,
+        isPremium: type === "premium"
+    };
+    gameState.logs.push(log);
+    console.log(`[AGENT]: ${text}`);
+}
+
+async function runAgent() {
+    if (gameState.status === "ACTIVE") {
+        addLog("Agent is already running", "public");
+        return;
+    }
+
+    gameState.status = "ACTIVE";
+    gameState.logs = [];
+    gameState.startTime = Date.now();
+    gameState.endTime = null;
+
+    addLog("System initialized. Connecting to Solana Mainnet...", "public");
+
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash-exp", // or "gemini-2.0-flash-thinking-exp" for better reasoning
+            systemInstruction: systemInstruction,
+            tools: [{ functionDeclarations: tools }]
+        });
+
+        // Start a chat session
+        const chat = model.startChat();
+
+        addLog("🤖 Agent Online. Thinking...", "public");
+
+        // Initial Trigger
+        let response = await chat.sendMessage("Wake up and check status.");
+
+        // --- THE LOOP: Check if Gemini wants to use a tool ---
+        while (true) {
+            // Check for function calls in the response
+            // Try multiple ways to access function calls (API may vary)
+            let functionCall = null;
+            
+            // Method 1: Direct functionCalls() method
+            try {
+                const functionCalls = response.functionCalls?.();
+                if (functionCalls && functionCalls.length > 0) {
+                    functionCall = functionCalls[0];
+                }
+            } catch (e) {
+                // Method 2: Access via response structure
+                const candidate = response.response?.candidates?.[0];
+                const parts = candidate?.content?.parts || [];
+                const functionCallPart = parts.find(part => part.functionCall);
+                if (functionCallPart) {
+                    functionCall = functionCallPart.functionCall;
+                }
+            }
+            
+            if (functionCall) {
+                // 1. Gemini wants to perform an action
+                const name = functionCall.name;
+                const args = functionCall.args || {};
+                addLog(`> Brain requested tool: ${name}`, "premium");
+                
+                // 2. Execute the actual JavaScript code
+                let toolResult;
+                try {
+                    toolResult = await functions[name](args);
+                    addLog(`> Tool execution result: ${JSON.stringify(toolResult)}`, "premium");
+                } catch (error) {
+                    toolResult = { status: "error", message: error.message };
+                    addLog(`> Tool execution failed: ${error.message}`, "premium");
+                }
+
+                // 3. Feed the result back to Gemini so it knows what happened
+                response = await chat.sendMessage({
+                    functionResponse: {
+                        name: name,
+                        response: toolResult
+                    }
+                });
+            } else {
+                // 4. If no tool is called, it's just a text response (Agent talking)
+                const text = response.text();
+                if (text) {
+                    addLog(`[AGENT]: ${text}`, "public");
+                }
+                break; // End this turn
+            }
+        }
+
+        // Mark as success if we got here without errors
+        gameState.status = "SUCCESS";
+        gameState.endTime = Date.now();
+        addLog("MISSION ACCOMPLISHED. PROFIT SECURED.", "public");
+
+    } catch (error) {
+        console.error("Agent Error:", error);
+        gameState.status = "FAILED";
+        gameState.endTime = Date.now();
+        addLog(`LIQUIDATED. MISSION FAILED: ${error.message}`, "public");
+    }
+}
+
+// --- API ENDPOINTS ---
+
+// 1. Get Game Status (For the UI header)
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: gameState.status,
+        mission: gameState.mission,
+        logsCount: gameState.logs.length,
+        startTime: gameState.startTime,
+        endTime: gameState.endTime
+    });
+});
+
+// 2. Get Logs (For the Terminal View)
+app.get('/api/logs', (req, res) => {
+    // In a real x402 app, you would check headers here.
+    // For now, we send everything, and the frontend blurs it if isPremium = true.
+    res.json(gameState.logs);
+});
+
+// 3. Force Start (For debugging)
+app.post('/api/start', (req, res) => {
+    runAgent();
+    res.json({ message: "Agent started" });
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Solana Agent running on http://localhost:${PORT}`);
+    console.log(`Make sure to set up your .env file with GEMINI_API_KEY, SOLANA_PRIVATE_KEY, and RPC_URL`);
+});

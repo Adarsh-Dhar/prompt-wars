@@ -2,16 +2,22 @@
   "name": "prompt-wars-agent",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "agent-server.js",
   "scripts": {
+    "start": "node agent-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@solana/web3.js": "^1.95.4",
+    "bs58": "^6.0.0",
     "cors": "^2.8.5",
+    "cross-fetch": "^4.0.0",
+    "dotenv": "^16.4.7",
     "express": "^5.2.1"
   }
 }
