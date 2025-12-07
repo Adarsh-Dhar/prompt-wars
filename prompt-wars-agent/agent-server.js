@@ -16,13 +16,20 @@ if (!process.env.GEMINI_API_KEY) {
 const app = express();
 const PORT = 4000;
 
-app.use(cors());
+// CORS configuration to allow frontend
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'x-payment-token']
+}));
 app.use(express.json());
 
 // x402 Configuration
 const x402Connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com");
 const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
 const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
+const PEEK_PRICE = 0.05; // Price for unlocking logs
+const GOD_MODE_PRICE = 1.0; // Price for God Mode injection
 
 // --- MEMORY STATE (The "Black Box") ---
 // We store logs here so the frontend can fetch them
@@ -32,7 +39,8 @@ let agentState = {
     status: "IDLE", // IDLE, ANALYZING, TRADING, SLEEPING
     logs: [],       // Stores the Chain of Thought
     lastUpdate: Date.now(),
-    mission: "Autonomous Hedge Fund - Find Alpha and Trade"
+    mission: "Autonomous Hedge Fund - Find Alpha and Trade",
+    injectionQueue: [] // God Mode prompts waiting to be processed
 };
 
 // --- LOGGING SYSTEM ---
@@ -93,7 +101,7 @@ async function runAgentLoop() {
     broadcast("Agent Core Initialized. Connecting to Solana...", "system");
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.5-flash",
         systemInstruction: systemInstruction,
         tools: [{ functionDeclarations: tools }]
     });
@@ -107,8 +115,16 @@ async function runAgentLoop() {
     // In a real app, use cron jobs. Here we use a loop with pauses.
     while (true) {
         try {
-            agentState.status = "ANALYZING";
-            broadcast("Analyzing market conditions...", "thought");
+            // 0. CHECK FOR GOD MODE INJECTIONS FIRST
+            if (agentState.injectionQueue.length > 0) {
+                const injection = agentState.injectionQueue.shift();
+                msg = `[SYSTEM: GOD MODE ACTIVATED by User ${injection.user || 'Anon'}] ${injection.prompt}`;
+                broadcast(`⚠️ GOD MODE INTERVENTION: "${injection.prompt}"`, "alert");
+                agentState.status = "ANALYZING";
+            } else {
+                agentState.status = "ANALYZING";
+                broadcast("Analyzing market conditions...", "thought");
+            }
             
             // 1. Send message to Gemini
             let result = await chat.sendMessage(msg);
@@ -165,9 +181,30 @@ async function runAgentLoop() {
             }
             
             // 3. Log the Final Text Response (The "Voice")
-            const textResponse = result.text();
-            if (textResponse) {
-                broadcast(textResponse, "agent_speech");
+            let textResponse = null;
+            try {
+                // Try different methods to get text response
+                if (typeof result.text === 'function') {
+                    textResponse = result.text();
+                } else if (result.response?.text) {
+                    textResponse = result.response.text();
+                } else if (result.response?.candidates?.[0]?.content?.parts) {
+                    // Extract text from parts
+                    const parts = result.response.candidates[0].content.parts;
+                    const textParts = parts.filter(part => part.text).map(part => part.text);
+                    textResponse = textParts.join(' ');
+                } else if (result.candidates?.[0]?.content?.parts) {
+                    const parts = result.candidates[0].content.parts;
+                    const textParts = parts.filter(part => part.text).map(part => part.text);
+                    textResponse = textParts.join(' ');
+                }
+                
+                if (textResponse) {
+                    broadcast(textResponse, "agent_speech");
+                }
+            } catch (error) {
+                console.error("Error extracting text response:", error);
+                // Continue even if text extraction fails
             }
             
             // 4. Sleep to prevent draining API credits/spamming
@@ -183,6 +220,42 @@ async function runAgentLoop() {
             agentState.status = "SLEEPING";
             await new Promise(r => setTimeout(r, 10000)); // Wait before retry
         }
+    }
+}
+
+// --- x402 PAYMENT VERIFICATION HELPER ---
+async function verifyPayment(signature, requiredAmount) {
+    try {
+        const tx = await x402Connection.getParsedTransaction(signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment: 'confirmed'
+        });
+
+        if (!tx) {
+            return { valid: false, error: "Transaction not found or not confirmed yet." };
+        }
+
+        // Check if money went to us
+        let validPayment = false;
+
+        tx.transaction.message.accountKeys.forEach((key, index) => {
+            if (key.pubkey.toBase58() === SERVER_WALLET) {
+                const pre = tx.meta.preBalances[index];
+                const post = tx.meta.postBalances[index];
+                if ((post - pre) >= (requiredAmount * 1e9)) {
+                    validPayment = true;
+                }
+            }
+        });
+
+        if (!validPayment) {
+            return { valid: false, error: "Insufficient payment amount verified." };
+        }
+
+        return { valid: true };
+    } catch (error) {
+        console.error("Payment verification error:", error);
+        return { valid: false, error: "Verification failed" };
     }
 }
 
@@ -203,47 +276,16 @@ const x402Middleware = async (req, res, next) => {
     }
 
     // 2. Verify Payment on-chain
-    try {
-        const tx = await x402Connection.getParsedTransaction(paymentToken, {
-            maxSupportedTransactionVersion: 0,
-            commitment: 'confirmed'
-        });
-
-        if (!tx) {
-            return res.status(400).json({ error: "Transaction not found or not confirmed yet." });
-        }
-
-        // Check if money went to us
-        let validPayment = false;
-
-        // Simple check: Look for a transfer to our wallet
-        // In prod, you'd check the amount strictly.
-        // This parser depends on standard system program transfers
-        tx.transaction.message.accountKeys.forEach((key, index) => {
-            if (key.pubkey.toBase58() === SERVER_WALLET) {
-                // If we are in the account keys, check balance changes or instruction logic
-                // For hackathon speed: we assume if the tx exists and involves us, it's valid.
-                // REAL IMPLEMENTATION: Parse `postBalances` - `preBalances` for this index.
-                const pre = tx.meta.preBalances[index];
-                const post = tx.meta.postBalances[index];
-                if ((post - pre) >= (PRICE_SOL * 1e9)) {
-                    validPayment = true;
-                }
-            }
-        });
-
-        if (!validPayment) {
-            return res.status(402).json({ error: "Insufficient payment amount verified." });
-        }
-
-        // Payment Valid! Attach info and proceed.
-        req.paymentSignature = paymentToken;
-        next();
-
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ error: "Verification failed" });
+    const verification = await verifyPayment(paymentToken, PRICE_SOL);
+    
+    if (!verification.valid) {
+        return res.status(verification.error === "Transaction not found or not confirmed yet." ? 400 : 402)
+            .json({ error: verification.error });
     }
+
+    // Payment Valid! Attach info and proceed.
+    req.paymentSignature = paymentToken;
+    next();
 };
 
 // --- API ENDPOINTS (For the Frontend) ---
@@ -264,22 +306,105 @@ app.get('/api/public-status', (req, res) => {
     res.json({ status: "Agent Market is Open", trend: "Neutral" });
 });
 
-// 1. Public Logs (The "Free Tier")
-// Returns basic info, blurs specific "premium" details if you want
-app.get('/api/logs', (req, res) => {
+// Helper function to redact text (replace letters with blocks)
+function redactText(text) {
+    if (!text) return text;
+    return text.replace(/[a-zA-Z]/g, "█");
+}
+
+// 1. Stream/Logs Endpoint (The "Peep Show")
+// Supports both /api/logs and /api/stream
+// If x-payment-token header is provided and valid, shows clear logs
+// Otherwise, shows redacted logs (█ blocks)
+app.get('/api/logs', async (req, res) => {
+    const paymentToken = req.headers['x-payment-token'];
+    let hasPaid = false;
+
+    // Check if user paid for "Peek" access (0.05 SOL)
+    if (paymentToken) {
+        const verification = await verifyPayment(paymentToken, PEEK_PRICE);
+        hasPaid = verification.valid;
+    }
+
+    const visibleLogs = agentState.logs.map(log => {
+        // Always show alert logs (God Mode interventions) in clear text
+        if (log.type === "alert") {
+            return log;
+        }
+
+        // Public log types (thought, agent_speech, system) - always show in clear text
+        if (log.type === 'thought' || log.type === 'agent_speech' || log.type === 'system') {
+            return log;
+        }
+
+        // If user paid, show everything (including premium/tool logs)
+        if (hasPaid) {
+            return log;
+        }
+
+        // Otherwise, redact premium/tool logs only
+        if (log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
+            return {
+                ...log,
+                message: redactText(log.message),
+                details: log.details ? (typeof log.details === 'string' ? redactText(log.details) : null) : null
+            };
+        }
+
+        // For any other log types, show as-is (or customize as needed)
+        return log;
+    });
+
     res.json({
         status: agentState.status,
-        logs: agentState.logs.map(log => {
-            // OPTIONAL: Redact sensitive info for public users
-            if (log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
-                return { 
-                    ...log, 
-                    message: "--- ENCRYPTED ALPHA DATA ---", 
-                    details: null 
-                };
-            }
+        logs: visibleLogs,
+        lastUpdate: agentState.lastUpdate
+    });
+});
+
+// Alias for /api/stream (same as /api/logs)
+app.get('/api/stream', async (req, res) => {
+    // Reuse the same logic as /api/logs
+    const paymentToken = req.headers['x-payment-token'];
+    let hasPaid = false;
+
+    if (paymentToken) {
+        const verification = await verifyPayment(paymentToken, PEEK_PRICE);
+        hasPaid = verification.valid;
+    }
+
+    const visibleLogs = agentState.logs.map(log => {
+        // Always show alert logs (God Mode interventions) in clear text
+        if (log.type === "alert") {
             return log;
-        }),
+        }
+
+        // Public log types (thought, agent_speech, system) - always show in clear text
+        if (log.type === 'thought' || log.type === 'agent_speech' || log.type === 'system') {
+            return log;
+        }
+
+        // If user paid, show everything (including premium/tool logs)
+        if (hasPaid) {
+            return log;
+        }
+
+        // Otherwise, redact premium/tool logs only
+        if (log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
+            return {
+                ...log,
+                message: redactText(log.message),
+                details: log.details ? (typeof log.details === 'string' ? redactText(log.details) : null) : null
+            };
+        }
+
+        // For any other log types, show as-is (or customize as needed)
+        return log;
+    });
+
+    res.json({
+        status: agentState.status,
+        logs: visibleLogs,
         lastUpdate: agentState.lastUpdate
     });
 });
@@ -315,6 +440,32 @@ app.post('/api/start', (req, res) => {
     } else {
         res.json({ message: "Agent is already running", status: agentState.status });
     }
+});
+
+// 5. God Mode Injection Endpoint
+app.post('/api/god-mode', async (req, res) => {
+    const { prompt, signature } = req.body;
+
+    if (!prompt || !signature) {
+        return res.status(400).json({ error: "Missing required fields: prompt and signature" });
+    }
+
+    // Verify payment (1.0 SOL for God Mode)
+    const verification = await verifyPayment(signature, GOD_MODE_PRICE);
+
+    if (!verification.valid) {
+        return res.status(verification.error === "Transaction not found or not confirmed yet." ? 400 : 402)
+            .json({ error: verification.error || "Payment Required: 1.0 SOL" });
+    }
+
+    // Add to injection queue
+    agentState.injectionQueue.push({
+        user: "Anon", // Could be extracted from signature or passed in request
+        prompt: prompt,
+        timestamp: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: "Injection Queued" });
 });
 
 // Start Server & Agent

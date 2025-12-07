@@ -6,15 +6,31 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Setup Connection & Wallet
-if (!process.env.SOLANA_PRIVATE_KEY) {
-    throw new Error('SOLANA_PRIVATE_KEY is not set in .env file');
-}
-
 const connection = new Connection(process.env.RPC_URL || 'https://api.mainnet-beta.solana.com');
-const secretKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
-const wallet = Keypair.fromSecretKey(secretKey);
 
-console.log(`Agent Wallet Loaded: ${wallet.publicKey.toBase58()}`);
+let wallet;
+if (!process.env.SOLANA_PRIVATE_KEY) {
+    // Generate a test keypair for development/testing
+    console.warn('⚠️  WARNING: SOLANA_PRIVATE_KEY not set. Generating a test keypair for development.');
+    console.warn('⚠️  This keypair has no funds and cannot perform real transactions.');
+    wallet = Keypair.generate();
+    console.log(`Test Wallet Generated: ${wallet.publicKey.toBase58()}`);
+} else {
+    try {
+        const secretKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
+        wallet = Keypair.fromSecretKey(secretKey);
+        console.log(`Agent Wallet Loaded: ${wallet.publicKey.toBase58()}`);
+    } catch (error) {
+        if (error.message.includes('Non-base58')) {
+            console.error('❌ SOLANA_PRIVATE_KEY is not a valid base58 string.');
+            console.error('   Generating a test keypair instead for development.');
+            wallet = Keypair.generate();
+            console.log(`Test Wallet Generated: ${wallet.publicKey.toBase58()}`);
+        } else {
+            throw error;
+        }
+    }
+}
 
 // --- HELPER FUNCTIONS ---
 

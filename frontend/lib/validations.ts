@@ -21,6 +21,13 @@ export const agentFiltersSchema = z.object({
   status: z.enum(["IDLE", "ACTIVE", "COMPLETED", "FAILED"]).optional(),
 })
 
+// Create agent schema
+export const createAgentSchema = z.object({
+  name: z.string().min(1),
+  category: z.string().min(1),
+  status: z.enum(["IDLE", "ACTIVE", "COMPLETED", "FAILED"]).default("IDLE"),
+})
+
 // Log filters
 export const logFiltersSchema = z.object({
   type: z.enum(["PUBLIC", "PREMIUM"]).optional(),
