@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MissionStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BetStatus {
+  ACTIVE
+  SETTLED
+  CANCELLED
+}
+
+enum BetOutcome {
+  WON
+  LOST
+  PENDING
+}
+
+enum LogType {
+  PUBLIC
+  PREMIUM
+}
+
+enum AgentStatus {
+  IDLE
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String   @id @default(uuid())
+  walletAddress String   @unique
+  totalWinnings Decimal  @default(0) @db.Decimal(18, 2)
+  winRate       Decimal? @db.Decimal(5, 2)
+  totalBets     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bets  Bet[]
+  trades Trade[]
+
+  @@index([walletAddress])
+}
+
+model Agent {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  category  String
+  status    AgentStatus @default(IDLE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  missions  Mission[]
+  logs      Log[]
+  stats     AgentStats?
+
+  @@index([status])
+  @@index([category])
+}
+
+model Mission {
+  id          String        @id @default(uuid())
+  agentId     String
+  description String
+  startTime   DateTime
+  endTime     DateTime
+  status      MissionStatus @default(PENDING)
+  category    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  agent  Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  market Market?
+
+  @@index([agentId])
+  @@index([status])
+  @@index([category])
+}
+
+model Market {
+  id          String   @id @default(uuid())
+  missionId   String   @unique
+  moonPrice   Decimal  @default(0.5) @db.Decimal(10, 2)
+  rugPrice    Decimal  @default(0.5) @db.Decimal(10, 2)
+  totalVolume Decimal  @default(0) @db.Decimal(18, 2)
+  liquidity   Decimal  @default(0) @db.Decimal(18, 2)
+  participants Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  bets    Bet[]
+  trades  Trade[]
+
+  @@index([missionId])
+}
+
+model Bet {
+  id           String     @id @default(uuid())
+  userId       String
+  marketId     String
+  position     String // "MOON" or "RUG"
+  shares       Int
+  entryPrice   Decimal    @db.Decimal(10, 2)
+  currentPrice Decimal    @db.Decimal(10, 2)
+  status       BetStatus  @default(ACTIVE)
+  outcome      BetOutcome? @default(PENDING)
+  pnl          Decimal?   @db.Decimal(18, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([marketId])
+  @@index([status])
+}
+
+model Trade {
+  id        String   @id @default(uuid())
+  marketId  String
+  userId    String
+  position  String // "MOON" or "RUG"
+  shares    Int
+  price     Decimal  @db.Decimal(10, 2)
+  timestamp DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+model Log {
+  id        String   @id @default(uuid())
+  agentId   String
+  type      LogType
+  content   String   @db.Text
+  timestamp DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([type])
+  @@index([timestamp])
+}
+
+model AgentStats {
+  id         String   @id @default(uuid())
+  agentId   String   @unique
+  currentPnL Decimal  @default(0) @db.Decimal(18, 2)
+  compute    Decimal  @default(0) @db.Decimal(5, 2) // percentage
+  status     String
+  lastUpdated DateTime @default(now()) @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
