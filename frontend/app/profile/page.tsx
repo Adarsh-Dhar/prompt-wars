@@ -1,89 +1,94 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Copy, CheckCircle, XCircle, Clock, TrendingUp, TrendingDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-const activeBets = [
-  {
-    id: 1,
-    mission: "Turn $10 into $100 on pump.fun",
-    agent: "ALPHA-7",
-    position: "MOON",
-    shares: 50,
-    entryPrice: "$0.58",
-    currentPrice: "$0.65",
-    pnl: "+$3.50",
-    timeRemaining: "45:22",
-  },
-  {
-    id: 2,
-    mission: "Win 10 consecutive poker hands",
-    agent: "SIGMA-X",
-    position: "RUG",
-    shares: 30,
-    entryPrice: "$0.55",
-    currentPrice: "$0.58",
-    pnl: "+$0.90",
-    timeRemaining: "1:23:45",
-  },
-]
-
-const betHistory = [
-  {
-    id: 1,
-    mission: "Deploy contract & get 100 users",
-    agent: "NEXUS-9",
-    position: "MOON",
-    shares: 100,
-    outcome: "WON",
-    pnl: "+$42.00",
-    date: "2024-01-15",
-  },
-  {
-    id: 2,
-    mission: "Generate viral meme coin",
-    agent: "ECHO-3",
-    position: "MOON",
-    shares: 25,
-    outcome: "LOST",
-    pnl: "-$25.00",
-    date: "2024-01-14",
-  },
-  {
-    id: 3,
-    mission: "Execute 50 arb trades",
-    agent: "VIPER-2",
-    position: "MOON",
-    shares: 75,
-    outcome: "WON",
-    pnl: "+$18.75",
-    date: "2024-01-13",
-  },
-  {
-    id: 4,
-    mission: "Accumulate 500 followers",
-    agent: "GHOST-7",
-    position: "RUG",
-    shares: 40,
-    outcome: "WON",
-    pnl: "+$22.00",
-    date: "2024-01-12",
-  },
-]
+import { Input } from "@/components/ui/input"
 
 export default function ProfilePage() {
   const [copied, setCopied] = useState(false)
+  const [walletAddress, setWalletAddress] = useState("")
+  const [profile, setProfile] = useState<any>(null)
+  const [activeBets, setActiveBets] = useState<any[]>([])
+  const [betHistory, setBetHistory] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [walletInput, setWalletInput] = useState("")
 
-  const walletAddress = "7xK9m...f2Aa"
-  const fullAddress = "7xK9mPqR3vB8nL2sT6wE4yU1iO0pA5zX8cV7bN9mF2Aa"
+  useEffect(() => {
+    // Try to get wallet from localStorage or URL params
+    const storedWallet = localStorage.getItem("walletAddress")
+    const urlParams = new URLSearchParams(window.location.search)
+    const walletParam = urlParams.get("wallet")
+    const wallet = walletParam || storedWallet || ""
+
+    if (wallet) {
+      setWalletAddress(wallet)
+      fetchProfileData(wallet)
+    } else {
+      setLoading(false)
+    }
+  }, [])
+
+  const fetchProfileData = async (wallet: string) => {
+    try {
+      setLoading(true)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+
+      // Fetch profile
+      const profileRes = await fetch(`${baseUrl}/api/profile/${wallet}`)
+      if (profileRes.ok) {
+        const profileData = await profileRes.json()
+        setProfile(profileData.user)
+      }
+
+      // Fetch active bets
+      const betsRes = await fetch(`${baseUrl}/api/profile/${wallet}/bets?status=ACTIVE`)
+      if (betsRes.ok) {
+        const betsData = await betsRes.json()
+        setActiveBets(betsData.bets || [])
+      }
+
+      // Fetch bet history
+      const historyRes = await fetch(`${baseUrl}/api/profile/${wallet}/history`)
+      if (historyRes.ok) {
+        const historyData = await historyRes.json()
+        setBetHistory(historyData.history || [])
+      }
+    } catch (error) {
+      console.error("Error fetching profile data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleWalletSubmit = () => {
+    if (walletInput.trim()) {
+      const wallet = walletInput.trim()
+      setWalletAddress(wallet)
+      localStorage.setItem("walletAddress", wallet)
+      fetchProfileData(wallet)
+    }
+  }
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(fullAddress)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (walletAddress) {
+      navigator.clipboard.writeText(walletAddress)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const formatWallet = (address: string) => {
+    if (!address) return ""
+    if (address.length <= 10) return address
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }
+
+  const formatWinnings = (winnings: number) => {
+    const sign = winnings >= 0 ? "+" : ""
+    return `${sign}$${winnings.toFixed(2)}`
   }
 
   return (
@@ -98,68 +103,114 @@ export default function ProfilePage() {
           <p className="font-mono text-sm text-muted-foreground">Your bets, history, and performance</p>
         </div>
 
-        {/* User stats card */}
-        <Card className="mb-8 border-border/50 bg-card/80">
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-              {/* Wallet info */}
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[var(--neon-cyan)]/50 bg-[var(--neon-cyan)]/10">
-                  <span className="font-mono text-2xl font-bold text-[var(--neon-cyan)]">7x</span>
-                </div>
-                <div>
-                  <div className="mb-1 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                    Connected Wallet
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-lg text-foreground">{walletAddress}</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyAddress}>
-                      <Copy className={`h-3 w-3 ${copied ? "text-[var(--neon-green)]" : "text-muted-foreground"}`} />
-                    </Button>
-                  </div>
+        {/* Wallet input if not set */}
+        {!walletAddress && (
+          <Card className="mb-8 border-border/50 bg-card/80">
+            <CardContent className="p-6">
+              <div className="flex flex-col gap-4">
+                <div className="font-mono text-sm text-foreground">Enter your wallet address to view your profile</div>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Wallet address"
+                    value={walletInput}
+                    onChange={(e) => setWalletInput(e.target.value)}
+                    className="font-mono"
+                    onKeyDown={(e) => e.key === "Enter" && handleWalletSubmit()}
+                  />
+                  <Button onClick={handleWalletSubmit} className="font-mono">
+                    Load Profile
+                  </Button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="font-mono text-xs uppercase text-muted-foreground">Total Winnings</div>
-                  <div className="font-mono text-2xl font-bold text-[var(--neon-green)]">+$57.75</div>
+        {loading ? (
+          <div className="text-center font-mono text-sm text-muted-foreground py-12">Loading profile...</div>
+        ) : walletAddress && profile ? (
+          <>
+            {/* User stats card */}
+            <Card className="mb-8 border-border/50 bg-card/80">
+              <CardContent className="p-6">
+                <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                  {/* Wallet info */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[var(--neon-cyan)]/50 bg-[var(--neon-cyan)]/10">
+                      <span className="font-mono text-2xl font-bold text-[var(--neon-cyan)]">
+                        {walletAddress.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="mb-1 font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                        Connected Wallet
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-lg text-foreground">{formatWallet(walletAddress)}</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyAddress}>
+                          <Copy
+                            className={`h-3 w-3 ${copied ? "text-[var(--neon-green)]" : "text-muted-foreground"}`}
+                          />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="font-mono text-xs uppercase text-muted-foreground">Total Winnings</div>
+                      <div
+                        className={`font-mono text-2xl font-bold ${
+                          profile.totalWinnings >= 0 ? "text-[var(--neon-green)]" : "text-[var(--neon-red)]"
+                        }`}
+                      >
+                        {formatWinnings(profile.totalWinnings)}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-mono text-xs uppercase text-muted-foreground">Win Rate</div>
+                      <div className="font-mono text-2xl font-bold text-[var(--neon-cyan)]">
+                        {profile.winRate.toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-mono text-xs uppercase text-muted-foreground">Total Bets</div>
+                      <div className="font-mono text-2xl font-bold text-foreground">{profile.totalBets}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <div className="font-mono text-xs uppercase text-muted-foreground">Win Rate</div>
-                  <div className="font-mono text-2xl font-bold text-[var(--neon-cyan)]">75%</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-mono text-xs uppercase text-muted-foreground">Total Bets</div>
-                  <div className="font-mono text-2xl font-bold text-foreground">6</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </>
+        ) : null}
 
         {/* Bets tabs */}
-        <Tabs defaultValue="active" className="w-full">
-          <TabsList className="mb-4 w-full justify-start border-b border-border/50 bg-transparent p-0">
-            <TabsTrigger
-              value="active"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-6 py-3 font-mono text-xs uppercase tracking-widest data-[state=active]:border-[var(--neon-cyan)] data-[state=active]:text-[var(--neon-cyan)]"
-            >
-              Active Bets ({activeBets.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="history"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-6 py-3 font-mono text-xs uppercase tracking-widest data-[state=active]:border-[var(--neon-magenta)] data-[state=active]:text-[var(--neon-magenta)]"
-            >
-              Bet History ({betHistory.length})
-            </TabsTrigger>
-          </TabsList>
+        {walletAddress && profile && (
+          <Tabs defaultValue="active" className="w-full">
+            <TabsList className="mb-4 w-full justify-start border-b border-border/50 bg-transparent p-0">
+              <TabsTrigger
+                value="active"
+                className="rounded-none border-b-2 border-transparent bg-transparent px-6 py-3 font-mono text-xs uppercase tracking-widest data-[state=active]:border-[var(--neon-cyan)] data-[state=active]:text-[var(--neon-cyan)]"
+              >
+                Active Bets ({activeBets.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="history"
+                className="rounded-none border-b-2 border-transparent bg-transparent px-6 py-3 font-mono text-xs uppercase tracking-widest data-[state=active]:border-[var(--neon-magenta)] data-[state=active]:text-[var(--neon-magenta)]"
+              >
+                Bet History ({betHistory.length})
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Active Bets */}
-          <TabsContent value="active">
-            <div className="space-y-3">
-              {activeBets.map((bet) => (
+            {/* Active Bets */}
+            <TabsContent value="active">
+              {activeBets.length === 0 ? (
+                <div className="text-center font-mono text-sm text-muted-foreground py-12">No active bets</div>
+              ) : (
+                <div className="space-y-3">
+                  {activeBets.map((bet) => (
                 <Card key={bet.id} className="border-border/50 bg-card/80">
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -193,61 +244,75 @@ export default function ProfilePage() {
                         </div>
                         <div>
                           <div className="font-mono text-[10px] uppercase text-muted-foreground">PnL</div>
-                          <div className="flex items-center justify-center gap-1 font-mono text-sm text-[var(--neon-green)]">
-                            <TrendingUp className="h-3 w-3" />
+                          <div
+                            className={`flex items-center justify-center gap-1 font-mono text-sm ${
+                              bet.pnl.startsWith("+") ? "text-[var(--neon-green)]" : "text-[var(--neon-red)]"
+                            }`}
+                          >
+                            {bet.pnl.startsWith("+") ? (
+                              <TrendingUp className="h-3 w-3" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3" />
+                            )}
                             {bet.pnl}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 rounded bg-muted/50 px-3 py-2">
-                        <Clock className="h-4 w-4 text-[var(--neon-magenta)]" />
-                        <span className="font-mono text-sm text-foreground">{bet.timeRemaining}</span>
-                      </div>
+                      {bet.timeRemaining && (
+                        <div className="flex items-center gap-2 rounded bg-muted/50 px-3 py-2">
+                          <Clock className="h-4 w-4 text-[var(--neon-magenta)]" />
+                          <span className="font-mono text-sm text-foreground">{bet.timeRemaining}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          </TabsContent>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
 
-          {/* Bet History */}
-          <TabsContent value="history">
-            <Card className="border-border/50 bg-card/80">
-              <CardHeader className="border-b border-border/50 py-3">
-                <CardTitle className="font-mono text-xs uppercase tracking-widest text-foreground">
-                  Transaction History
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border/50 bg-muted/30">
-                        <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Mission
-                        </th>
-                        <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Agent
-                        </th>
-                        <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Position
-                        </th>
-                        <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Shares
-                        </th>
-                        <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Outcome
-                        </th>
-                        <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          PnL
-                        </th>
-                        <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                          Date
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {betHistory.map((bet) => (
+            {/* Bet History */}
+            <TabsContent value="history">
+              <Card className="border-border/50 bg-card/80">
+                <CardHeader className="border-b border-border/50 py-3">
+                  <CardTitle className="font-mono text-xs uppercase tracking-widest text-foreground">
+                    Transaction History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {betHistory.length === 0 ? (
+                    <div className="p-8 text-center font-mono text-sm text-muted-foreground">No bet history</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border/50 bg-muted/30">
+                            <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Mission
+                            </th>
+                            <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Agent
+                            </th>
+                            <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Position
+                            </th>
+                            <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Shares
+                            </th>
+                            <th className="px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Outcome
+                            </th>
+                            <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              PnL
+                            </th>
+                            <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Date
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {betHistory.map((bet) => (
                         <tr key={bet.id} className="border-b border-border/30 transition-colors hover:bg-muted/20">
                           <td className="px-4 py-3 font-mono text-xs text-foreground">{bet.mission}</td>
                           <td className="px-4 py-3 font-mono text-xs text-[var(--neon-cyan)]">{bet.agent}</td>
@@ -294,15 +359,17 @@ export default function ProfilePage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">{bet.date}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </div>
   )

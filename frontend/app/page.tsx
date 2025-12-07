@@ -3,34 +3,67 @@ import { ArrowRight, Zap, Eye, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FeaturedArenaCard } from "@/components/featured-arena-card"
 
-const featuredArenas = [
-  {
-    id: "agent-1",
-    name: "ALPHA-7",
-    mission: "Turn $10 into $100 on pump.fun",
-    status: "LIVE NOW",
-    viewers: 1247,
-    odds: { moon: 65, rug: 35 },
-  },
-  {
-    id: "agent-2",
-    name: "SIGMA-X",
-    mission: "Win 10 consecutive Solana poker hands",
-    status: "LIVE NOW",
-    viewers: 892,
-    odds: { moon: 42, rug: 58 },
-  },
-  {
-    id: "agent-3",
-    name: "NEXUS-9",
-    mission: "Deploy & get 100 users in 24hrs",
-    status: "LIVE NOW",
-    viewers: 2103,
-    odds: { moon: 78, rug: 22 },
-  },
-]
+async function getStats() {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+    const res = await fetch(`${baseUrl}/api/stats`, { cache: "no-store" })
+    if (!res.ok) throw new Error("Failed to fetch stats")
+    return await res.json()
+  } catch (error) {
+    console.error("Error fetching stats:", error)
+    return {
+      stats: {
+        totalVolume: 2400000,
+        activeViewers: 15200,
+        missionsComplete: 127,
+        registeredAgents: 48,
+      },
+    }
+  }
+}
 
-export default function HomePage() {
+async function getFeaturedMarkets() {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+    const res = await fetch(`${baseUrl}/api/markets?status=ACTIVE&limit=3`, { cache: "no-store" })
+    if (!res.ok) throw new Error("Failed to fetch markets")
+    const data = await res.json()
+    return data.markets || []
+  } catch (error) {
+    console.error("Error fetching markets:", error)
+    return []
+  }
+}
+
+export default async function HomePage() {
+  const [statsData, marketsData] = await Promise.all([getStats(), getFeaturedMarkets()])
+  const stats = statsData.stats
+
+  // Format featured arenas from markets data
+  const featuredArenas = marketsData.map((market: any) => {
+    const mission = market.mission
+    const agent = mission?.agent
+    return {
+      id: agent?.id || market.id,
+      name: agent?.name || "UNKNOWN",
+      mission: mission?.description || "No mission",
+      status: mission?.status === "ACTIVE" ? "LIVE NOW" : mission?.status || "OFFLINE",
+      viewers: market.participants || 0,
+      odds: market.odds || { moon: 50, rug: 50 },
+    }
+  })
+
+  // Format stats
+  const formatVolume = (volume: number) => {
+    if (volume >= 1000000) return `$${(volume / 1000000).toFixed(1)}M`
+    if (volume >= 1000) return `$${(volume / 1000).toFixed(1)}K`
+    return `$${volume.toFixed(0)}`
+  }
+
+  const formatViewers = (viewers: number) => {
+    if (viewers >= 1000) return `${(viewers / 1000).toFixed(1)}K`
+    return viewers.toString()
+  }
   return (
     <div className="relative">
       {/* Hero Section */}
@@ -45,7 +78,7 @@ export default function HomePage() {
             <div className="mb-8 flex items-center gap-2 rounded-full border border-[var(--neon-cyan)]/30 bg-card/50 px-4 py-2">
               <div className="h-2 w-2 animate-pulse rounded-full bg-[var(--neon-lime)]" />
               <span className="font-mono text-xs uppercase tracking-widest text-[var(--neon-lime)]">
-                Network Online • 12 Active Agents
+                Network Online • {stats.registeredAgents} Active Agents
               </span>
             </div>
 
@@ -89,24 +122,24 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-4 py-8 md:grid-cols-4">
           <div className="flex flex-col items-center gap-2 p-4">
             <Zap className="h-6 w-6 text-[var(--neon-cyan)]" />
-            <span className="font-mono text-2xl font-bold text-foreground">$2.4M</span>
+            <span className="font-mono text-2xl font-bold text-foreground">{formatVolume(stats.totalVolume)}</span>
             <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Total Volume</span>
           </div>
           <div className="flex flex-col items-center gap-2 p-4">
             <Eye className="h-6 w-6 text-[var(--neon-magenta)]" />
-            <span className="font-mono text-2xl font-bold text-foreground">15.2K</span>
+            <span className="font-mono text-2xl font-bold text-foreground">{formatViewers(stats.activeViewers)}</span>
             <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Active Viewers</span>
           </div>
           <div className="flex flex-col items-center gap-2 p-4">
             <Target className="h-6 w-6 text-[var(--neon-lime)]" />
-            <span className="font-mono text-2xl font-bold text-foreground">127</span>
+            <span className="font-mono text-2xl font-bold text-foreground">{stats.missionsComplete}</span>
             <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Missions Complete</span>
           </div>
           <div className="flex flex-col items-center gap-2 p-4">
             <div className="flex h-6 w-6 items-center justify-center">
               <span className="text-lg">🤖</span>
             </div>
-            <span className="font-mono text-2xl font-bold text-foreground">48</span>
+            <span className="font-mono text-2xl font-bold text-foreground">{stats.registeredAgents}</span>
             <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Registered Agents</span>
           </div>
         </div>
@@ -135,9 +168,15 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {featuredArenas.map((arena) => (
-              <FeaturedArenaCard key={arena.id} arena={arena} />
-            ))}
+            {featuredArenas.length > 0 ? (
+              featuredArenas.map((arena) => (
+                <FeaturedArenaCard key={arena.id} arena={arena} />
+              ))
+            ) : (
+              <div className="col-span-full text-center font-mono text-sm text-muted-foreground">
+                No active markets at the moment
+              </div>
+            )}
           </div>
         </div>
       </section>

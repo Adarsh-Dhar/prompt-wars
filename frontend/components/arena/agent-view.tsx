@@ -3,7 +3,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Battery, Activity, TrendingUp } from "lucide-react"
 
-export function AgentView() {
+interface AgentViewProps {
+  agentName?: string
+  stats?: any
+}
+
+export function AgentView({ agentName, stats }: AgentViewProps) {
+  const currentPnL = stats?.currentPnL || 0
+  const compute = stats?.compute || 0
+  const status = stats?.status || "IDLE"
+
+  const formatPnL = (pnl: number) => {
+    const sign = pnl >= 0 ? "+" : ""
+    return `${sign}$${pnl.toFixed(2)}`
+  }
+
   return (
     <div className="space-y-4">
       {/* Live Feed */}
@@ -24,7 +38,9 @@ export function AgentView() {
             {/* Overlay effects */}
             <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
             <div className="absolute bottom-4 left-4 rounded bg-background/80 px-2 py-1">
-              <span className="font-mono text-xs text-[var(--neon-cyan)]">FEED://MODDIO-ALPHA-7</span>
+              <span className="font-mono text-xs text-[var(--neon-cyan)]">
+                FEED://MODDIO-{agentName?.toUpperCase() || "UNKNOWN"}
+              </span>
             </div>
           </div>
         </CardContent>
@@ -46,7 +62,7 @@ export function AgentView() {
                 <span className="font-mono text-xs uppercase text-muted-foreground">Status</span>
               </div>
               <span className="rounded bg-[var(--neon-lime)]/20 px-2 py-0.5 font-mono text-xs font-bold text-[var(--neon-lime)]">
-                TRADING
+                {status.toUpperCase()}
               </span>
             </div>
 
@@ -56,7 +72,13 @@ export function AgentView() {
                 <TrendingUp className="h-4 w-4 text-[var(--neon-green)]" />
                 <span className="font-mono text-xs uppercase text-muted-foreground">Current PnL</span>
               </div>
-              <span className="font-mono text-sm font-bold text-[var(--neon-green)]">+$12.50</span>
+              <span
+                className={`font-mono text-sm font-bold ${
+                  currentPnL >= 0 ? "text-[var(--neon-green)]" : "text-[var(--neon-red)]"
+                }`}
+              >
+                {formatPnL(currentPnL)}
+              </span>
             </div>
 
             {/* Battery/Compute */}
@@ -66,10 +88,13 @@ export function AgentView() {
                   <Battery className="h-4 w-4 text-[var(--neon-cyan)]" />
                   <span className="font-mono text-xs uppercase text-muted-foreground">Compute</span>
                 </div>
-                <span className="font-mono text-xs text-[var(--neon-cyan)]">88%</span>
+                <span className="font-mono text-xs text-[var(--neon-cyan)]">{compute.toFixed(0)}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-[88%] bg-[var(--neon-cyan)] transition-all" />
+                <div
+                  className="h-full bg-[var(--neon-cyan)] transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, compute))}%` }}
+                />
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Timer, Users, TrendingUp, ArrowUpRight } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -8,71 +8,78 @@ import { Button } from "@/components/ui/button"
 
 const filters = ["All", "Trading Bots", "Gaming Bots", "Social Bots", "Creative Bots"]
 
-const markets = [
-  {
-    id: "agent-1",
-    name: "ALPHA-7",
-    mission: "Turn $10 into $100 on pump.fun in 60 mins",
-    category: "Trading Bots",
-    odds: { moon: 65, rug: 35 },
-    timeRemaining: "45:22",
-    participants: 342,
-    volume: "$12,450",
-  },
-  {
-    id: "agent-2",
-    name: "SIGMA-X",
-    mission: "Win 10 consecutive Solana poker hands",
-    category: "Gaming Bots",
-    odds: { moon: 42, rug: 58 },
-    timeRemaining: "1:23:45",
-    participants: 189,
-    volume: "$8,920",
-  },
-  {
-    id: "agent-3",
-    name: "NEXUS-9",
-    mission: "Deploy smart contract & get 100 users in 24hrs",
-    category: "Trading Bots",
-    odds: { moon: 78, rug: 22 },
-    timeRemaining: "18:45:12",
-    participants: 567,
-    volume: "$45,230",
-  },
-  {
-    id: "agent-4",
-    name: "ECHO-3",
-    mission: "Generate viral meme coin with 1000 holders",
-    category: "Creative Bots",
-    odds: { moon: 31, rug: 69 },
-    timeRemaining: "2:15:00",
-    participants: 423,
-    volume: "$23,100",
-  },
-  {
-    id: "agent-5",
-    name: "GHOST-7",
-    mission: "Accumulate 500 Twitter followers organically",
-    category: "Social Bots",
-    odds: { moon: 55, rug: 45 },
-    timeRemaining: "5:30:00",
-    participants: 156,
-    volume: "$5,680",
-  },
-  {
-    id: "agent-6",
-    name: "VIPER-2",
-    mission: "Execute 50 profitable arbitrage trades",
-    category: "Trading Bots",
-    odds: { moon: 72, rug: 28 },
-    timeRemaining: "3:00:00",
-    participants: 278,
-    volume: "$31,400",
-  },
-]
+function calculateTimeRemaining(endTime: string): string {
+  const now = new Date()
+  const end = new Date(endTime)
+  const diff = Math.floor((end.getTime() - now.getTime()) / 1000)
+
+  if (diff <= 0) {
+    return "00:00"
+  }
+
+  const hours = Math.floor(diff / 3600)
+  const minutes = Math.floor((diff % 3600) / 60)
+  const seconds = diff % 60
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
+function formatVolume(volume: number): string {
+  if (volume >= 1000) return `$${(volume / 1000).toFixed(1)}K`
+  return `$${volume.toFixed(0)}`
+}
 
 export default function MarketsPage() {
   const [activeFilter, setActiveFilter] = useState("All")
+  const [markets, setMarkets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchMarkets() {
+      try {
+        setLoading(true)
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+        const category = activeFilter === "All" ? undefined : activeFilter
+        const url = new URL(`${baseUrl}/api/markets`)
+        if (category) url.searchParams.set("category", category)
+        url.searchParams.set("status", "ACTIVE")
+
+        const res = await fetch(url.toString())
+        if (!res.ok) throw new Error("Failed to fetch markets")
+        const data = await res.json()
+
+        const formattedMarkets = data.markets.map((market: any) => {
+          const mission = market.mission
+          const agent = mission?.agent
+          return {
+            id: market.id,
+            agentId: agent?.id || market.id,
+            name: agent?.name || "UNKNOWN",
+            mission: mission?.description || "No mission",
+            category: mission?.category || "Unknown",
+            odds: market.odds || { moon: 50, rug: 50 },
+            timeRemaining: mission?.endTime ? calculateTimeRemaining(mission.endTime) : "00:00",
+            participants: market.participants || 0,
+            volume: formatVolume(Number(market.totalVolume || 0)),
+          }
+        })
+
+        setMarkets(formattedMarkets)
+        setError(null)
+      } catch (err) {
+        console.error("Error fetching markets:", err)
+        setError("Failed to load markets")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMarkets()
+  }, [activeFilter])
 
   const filteredMarkets = activeFilter === "All" ? markets : markets.filter((m) => m.category === activeFilter)
 
@@ -107,8 +114,15 @@ export default function MarketsPage() {
         </div>
 
         {/* Markets grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredMarkets.map((market) => (
+        {loading ? (
+          <div className="text-center font-mono text-sm text-muted-foreground py-12">Loading markets...</div>
+        ) : error ? (
+          <div className="text-center font-mono text-sm text-red-500 py-12">{error}</div>
+        ) : filteredMarkets.length === 0 ? (
+          <div className="text-center font-mono text-sm text-muted-foreground py-12">No markets found</div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredMarkets.map((market) => (
             <Card
               key={market.id}
               className="group border-border/50 bg-card/80 transition-all hover:border-[var(--neon-cyan)]/50"
@@ -160,15 +174,16 @@ export default function MarketsPage() {
                   asChild
                   className="w-full border border-[var(--neon-cyan)]/50 bg-transparent font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] transition-all hover:bg-[var(--neon-cyan)]/10"
                 >
-                  <Link href={`/arena/${market.id}`}>
+                  <Link href={`/arena/${market.agentId}`}>
                     Enter Arena
                     <ArrowUpRight className="ml-2 h-3 w-3" />
                   </Link>
                 </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
