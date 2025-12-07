@@ -13,12 +13,16 @@ export async function GET() {
     const totalVolume = markets.reduce((sum, market) => sum + Number(market.totalVolume), 0)
 
     // Get active viewers (users with active bets)
-    const activeViewers = await db.bet.count({
+    const activeBets = await db.bet.findMany({
       where: {
         status: "ACTIVE",
       },
+      select: {
+        userId: true,
+      },
       distinct: ["userId"],
     })
+    const activeViewers = activeBets.length
 
     // Get completed missions
     const missionsComplete = await db.mission.count({
@@ -40,7 +44,11 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Error fetching stats:", error)
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    return NextResponse.json(
+      { error: "Failed to fetch stats", details: errorMessage },
+      { status: 500 }
+    )
   }
 }
 

@@ -12,15 +12,16 @@ export async function GET(request: Request) {
       offset: searchParams.get("offset") || "0",
     })
 
-    const where: any = {
-      mission: {},
-    }
+    const where: any = {}
 
-    if (filters.category) {
-      where.mission.category = filters.category
-    }
-    if (filters.status) {
-      where.mission.status = filters.status
+    if (filters.category || filters.status) {
+      where.mission = {}
+      if (filters.category) {
+        where.mission.category = filters.category
+      }
+      if (filters.status) {
+        where.mission.status = filters.status
+      }
     }
 
     const markets = await db.market.findMany({
@@ -33,12 +34,6 @@ export async function GET(request: Request) {
                 stats: true,
               },
             },
-          },
-        },
-        _count: {
-          select: {
-            bets: true,
-            trades: true,
           },
         },
       },
@@ -71,7 +66,13 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error("Error fetching markets:", error)
-    return NextResponse.json({ error: "Failed to fetch markets" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    const errorDetails = error instanceof Error ? error.stack : String(error)
+    console.error("Error details:", errorDetails)
+    return NextResponse.json(
+      { error: "Failed to fetch markets", details: errorMessage },
+      { status: 500 }
+    )
   }
 }
 
