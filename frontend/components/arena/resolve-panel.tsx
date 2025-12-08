@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { sendSolPayment } from "@/lib/payments"
+import { PublicKey } from "@solana/web3.js"
+import { resolveMarket } from "@/lib/prediction-market/client"
 
 const RESOLVE_FEE_SOL = 0.001
 
@@ -34,37 +35,45 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
         throw new Error("Connect wallet to resolve")
       }
 
-      const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
-      if (!serverWallet) {
-        throw new Error("Server wallet not configured")
+      if (outcome === "INVALID") {
+        // For invalid, still use API fallback
+        const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
+        if (!serverWallet) {
+          throw new Error("Server wallet not configured")
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+        const res = await fetch(`${baseUrl}/api/markets/${marketId}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outcome: "INVALID",
+            resolvedBy: resolvedBy || publicKey.toBase58(),
+            resolutionTx,
+            walletAddress: publicKey.toBase58(),
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to resolve")
+        }
+        setMessage("Resolved successfully (via API)")
+        return
       }
 
-      // Require a small real transaction to authorize resolution
-      const txSignature = await sendSolPayment(
+      // Use on-chain resolve for YES/NO
+      const marketPda = new PublicKey(marketId)
+      const { signature } = await resolveMarket({
         connection,
-        { publicKey, sendTransaction } as any,
-        serverWallet,
-        RESOLVE_FEE_SOL
-      )
-
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
-      const res = await fetch(`${baseUrl}/api/markets/${marketId}/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outcome,
-          resolvedBy: resolvedBy || publicKey.toBase58(),
-          resolutionTx,
-          walletAddress: publicKey.toBase58(),
-          txSignature,
-        }),
+        wallet: { publicKey, sendTransaction } as any,
+        marketPda,
+        outcome: outcome.toLowerCase() as "yes" | "no",
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to resolve")
-      }
-      setMessage("Resolved successfully")
+
+      setMessage(`Resolved successfully! Transaction: ${signature}`)
+      setResolutionTx(signature)
     } catch (error: any) {
+      console.error("Resolve error:", error)
       setMessage(error.message || "Failed to resolve")
     } finally {
       setSubmitting(false)
@@ -75,7 +84,7 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--neon-cyan)]">
-          Manual Resolve
+          Resolve Market
         </p>
         {currentOutcome && (
           <span className="font-mono text-[11px] text-muted-foreground">Current: {currentOutcome}</span>
@@ -103,6 +112,7 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
           value={resolutionTx}
           onChange={(e) => setResolutionTx(e.target.value)}
           className="font-mono text-xs"
+          disabled={true}
         />
       </div>
       <div className="flex items-center gap-3">

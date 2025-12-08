@@ -81,7 +81,7 @@ export default async function AgentMarketDetailPage(
             </div>
           </div>
           <div className="lg:col-span-2">
-            <PredictionMarket market={market} agentId={agentId} />
+            <PredictionMarket market={market} agentId={agentId} marketId={marketId} />
           </div>
         </div>
 
