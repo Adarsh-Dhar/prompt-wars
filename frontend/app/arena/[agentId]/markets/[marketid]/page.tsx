@@ -9,12 +9,11 @@ async function getMarket(marketId: string) {
   return res.json()
 }
 
-export default async function AgentMarketDetailPage({
-  params,
-}: {
-  params: { agentId: string; marketId: string }
-}) {
-  const { agentId, marketId } = params
+export default async function AgentMarketDetailPage(
+  props: { params: Promise<{ agentId: string; marketId: string }> }
+) {
+  const resolvedParams = await props.params
+  const { agentId, marketId } = resolvedParams
   const data = await getMarket(marketId)
 
   if (!data?.market) {

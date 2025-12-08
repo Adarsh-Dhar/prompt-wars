@@ -1,18 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 
-export default function NewMarketPage({
-  params,
-}: {
-  params: { agentId: string }
-}) {
+export default function NewMarketPage() {
   const router = useRouter()
-  const agentId = params.agentId
+  const params = useParams<{ agentId: string }>()
+  const agentId = Array.isArray(params?.agentId) ? params?.agentId[0] : params?.agentId
   const [statement, setStatement] = useState("")
   const [description, setDescription] = useState("")
   const [closesAt, setClosesAt] = useState("")
@@ -42,7 +39,8 @@ export default function NewMarketPage({
         body: JSON.stringify({
           statement,
           description,
-          closesAt,
+          // Send an ISO string so the API's zod date coercion is consistent
+          closesAt: closeDate.toISOString(),
           minBet: Number(minBet),
           maxBet: maxBet ? Number(maxBet) : undefined,
           initialLiquidity: Number(initialLiquidity),
