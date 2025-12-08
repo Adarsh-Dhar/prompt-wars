@@ -69,6 +69,136 @@ export async function fetchRegistry(connection: Connection) {
 }
 
 /**
+ * Check if the program is deployed on-chain
+ */
+export async function checkProgramDeployed(connection: Connection): Promise<boolean> {
+  try {
+    const programInfo = await connection.getAccountInfo(PROGRAM_ID)
+    return programInfo !== null
+  } catch (error) {
+    return false
+  }
+}
+
+/**
+ * Initialize the registry if it doesn't exist
+ */
+export async function initializeRegistry(params: {
+  connection: Connection
+  wallet: Wallet
+  bondLamports?: number // Defaults to 5 SOL
+  slashPenaltyLamports?: number // Defaults to 1 SOL
+}) {
+  const { connection, wallet, bondLamports, slashPenaltyLamports } = params
+  const program = getProgram(connection, wallet)
+
+  if (!("publicKey" in wallet) || !wallet.publicKey) {
+    throw new Error("Wallet not connected")
+  }
+
+  // Log declared program ID
+  const declaredProgramId = PROGRAM_ID.toBase58()
+  console.log("=".repeat(80))
+  console.log("📋 PROGRAM ID DEBUG INFORMATION")
+  console.log("=".repeat(80))
+  console.log("🔵 DECLARED Program ID (from code/PROGRAM_ID):", declaredProgramId)
+  console.log("🔵 DECLARED Program ID (from IDL constant):", AGENT_REGISTRY_PROGRAM_ID)
+  console.log("🔵 Program object ID:", program.programId.toBase58())
+  console.log("🔵 IDL metadata address:", (agentRegistryIdl as any).metadata?.address || "not set")
+
+  // Check if program is deployed and get actual program ID
+  const isDeployed = await checkProgramDeployed(connection)
+  if (!isDeployed) {
+    console.error("❌ Program is NOT deployed at:", declaredProgramId)
+    const error = new Error("Agent Registry program is not deployed on-chain")
+    ;(error as any).isProgramNotDeployed = true
+    ;(error as any).programId = PROGRAM_ID.toBase58()
+    throw error
+  }
+
+  // Get actual program ID from on-chain account
+  try {
+    const programAccount = await connection.getAccountInfo(PROGRAM_ID)
+    if (programAccount) {
+      const actualProgramId = PROGRAM_ID.toBase58()
+      console.log("🟢 ACTUAL Program ID (on-chain account address):", actualProgramId)
+      console.log("🟢 ACTUAL Program Account Owner:", programAccount.owner.toBase58())
+      console.log("🟢 ACTUAL Program Account Executable:", programAccount.executable)
+      console.log("🟢 ACTUAL Program Account Lamports:", programAccount.lamports.toString())
+      
+      // Try to read the program data to find the declared ID embedded in the binary
+      // Anchor programs embed the program ID in the first 8 bytes of the executable data
+      if (programAccount.data && programAccount.data.length >= 8) {
+        const embeddedProgramIdBytes = programAccount.data.slice(0, 8)
+        console.log("🟢 ACTUAL Embedded Program ID (first 8 bytes):", Array.from(embeddedProgramIdBytes).map(b => b.toString(16).padStart(2, '0')).join(''))
+      }
+    } else {
+      console.error("❌ Program account not found at:", declaredProgramId)
+    }
+  } catch (error) {
+    console.error("❌ Error fetching program account info:", error)
+  }
+
+  // Compare declared vs actual
+  if (declaredProgramId !== AGENT_REGISTRY_PROGRAM_ID) {
+    console.warn("⚠️ WARNING: PROGRAM_ID constant doesn't match AGENT_REGISTRY_PROGRAM_ID constant!")
+    console.warn("   PROGRAM_ID:", declaredProgramId)
+    console.warn("   AGENT_REGISTRY_PROGRAM_ID:", AGENT_REGISTRY_PROGRAM_ID)
+  }
+
+  console.log("=".repeat(80))
+  console.log("The error 'DeclaredProgramIdMismatch' means:")
+  console.log("  - The program binary on-chain was compiled with a different declare_id!()")
+  console.log("  - You need to rebuild and redeploy with the current declare_id!() value")
+  console.log("=".repeat(80))
+
+  const registry = getRegistryPda()
+  const defaultBond = bondLamports || 5 * 1e9 // 5 SOL in lamports
+  const defaultSlash = slashPenaltyLamports || 1 * 1e9 // 1 SOL in lamports
+
+  try {
+    const sig = await program.methods
+      .initializeRegistry(new BN(defaultBond), new BN(defaultSlash))
+      .accounts({
+        registry,
+        authority: wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc()
+
+    return { signature: sig, registryPda: registry }
+  } catch (error: any) {
+    // Enhanced error logging for DeclaredProgramIdMismatch
+    if (error?.code === 4100 || error?.error?.errorCode?.code === "DeclaredProgramIdMismatch") {
+      console.error("=".repeat(80))
+      console.error("❌ DECLARED PROGRAM ID MISMATCH ERROR")
+      console.error("=".repeat(80))
+      console.error("Error Code:", error?.code || error?.error?.errorCode?.code)
+      console.error("Error Message:", error?.msg || error?.error?.errorMessage || error?.message)
+      
+      // Try to extract the declared and actual IDs from the error
+      const errorMsg = error?.msg || error?.error?.errorMessage || error?.message || ""
+      console.error("Full Error:", errorMsg)
+      
+      // The error should contain information about what was declared vs actual
+      if (error?.logs) {
+        console.error("Error Logs:")
+        error.logs.forEach((log: string) => console.error("  ", log))
+      }
+      
+      console.error("=".repeat(80))
+      console.error("SOLUTION:")
+      console.error("1. The deployed binary was compiled with a different declare_id!()")
+      console.error("2. Rebuild the program: cd stake && anchor build")
+      console.error("3. Redeploy: anchor deploy --provider.cluster devnet")
+      console.error("4. Make sure declare_id!() in lib.rs matches the deployed program address")
+      console.error("=".repeat(80))
+    }
+    throw error
+  }
+}
+
+/**
  * Fetch proof request account from contract
  */
 export async function fetchProofRequest(params: {

@@ -1,6 +1,6 @@
  "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import {
   ActivitySquare,
   ArrowRight,
@@ -23,7 +23,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react"
 import { LAMPORTS_PER_SOL } from "@solana/web3.js"
 
 import { cn } from "@/lib/utils"
-import { fetchRegistry, registerAgent, RegistryAccount } from "@/lib/stake/client"
+import { fetchRegistry, registerAgent, initializeRegistry, checkProgramDeployed, RegistryAccount } from "@/lib/stake/client"
 
 type CodenameStatus = "idle" | "checking" | "unique" | "taken"
 type LogLine = {
@@ -51,6 +51,10 @@ export default function NewAgentPage() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [isStaking, setIsStaking] = useState(false)
   const [txSig, setTxSig] = useState<string | null>(null)
+  const [holdProgress, setHoldProgress] = useState(0)
+  const [isHolding, setIsHolding] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(false)
+  const [programDeployed, setProgramDeployed] = useState<boolean | null>(null)
 
   const { connection } = useConnection()
   const wallet = useWallet()
@@ -104,25 +108,52 @@ export default function NewAgentPage() {
     })
   }
 
+  const loadRegistry = useCallback(async () => {
+    try {
+      setLoadingRegistry(true)
+      
+      // Check if program is deployed first
+      const deployed = await checkProgramDeployed(connection)
+      setProgramDeployed(deployed)
+      
+      if (!deployed) {
+        setLogs((prev) => [
+          ...prev,
+          "> [WARN] Agent Registry program not deployed",
+          "> Please deploy the program before initializing registry",
+        ])
+        setRegistry(null)
+        return
+      }
+      
+      const reg = await fetchRegistry(connection)
+      setRegistry(reg)
+      if (reg) {
+        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL bond`])
+      } else {
+        setLogs((prev) => [...prev, "> [WARN] Registry not found on-chain"])
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch registry", error)
+      setRegistry(null)
+      setLogs((prev) => [...prev, `> [ERROR] Failed to load registry: ${error?.message || "Unknown error"}`])
+    } finally {
+      setLoadingRegistry(false)
+    }
+  }, [connection])
+
   useEffect(() => {
     let cancelled = false
-    async function loadRegistry() {
-      try {
-        setLoadingRegistry(true)
-        const reg = await fetchRegistry(connection)
-        if (!cancelled) setRegistry(reg)
-      } catch (error) {
-        console.error("Failed to fetch registry", error)
-        if (!cancelled) setRegistry(null)
-      } finally {
-        if (!cancelled) setLoadingRegistry(false)
-      }
+    async function initLoad() {
+      await loadRegistry()
     }
-    loadRegistry()
+    if (!cancelled) {
+      initLoad()
+    }
     return () => {
       cancelled = true
     }
-  }, [connection])
+  }, [loadRegistry, isInitializing])
 
   useEffect(() => {
     let cancelled = false
@@ -144,26 +175,70 @@ export default function NewAgentPage() {
 
   const bondSol = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(2) : "5.00"
 
+  // Debug: Log stake conditions
+  useEffect(() => {
+    if (diagnosticsComplete) {
+      console.log("Stake conditions:", {
+        diagnosticsComplete,
+        runningDiagnostics,
+        isStaking,
+        walletConnected: wallet.connected,
+        hasPublicKey: !!wallet.publicKey,
+        hasSendTransaction: !!wallet.sendTransaction,
+        hasRegistry: !!registry,
+        loadingRegistry,
+      })
+    }
+  }, [diagnosticsComplete, runningDiagnostics, isStaking, wallet.connected, wallet.publicKey, wallet.sendTransaction, registry, loadingRegistry])
+
   const stakeDisabled =
     !diagnosticsComplete ||
     runningDiagnostics ||
     isStaking ||
     !wallet.connected ||
     !wallet.publicKey ||
+    !wallet.sendTransaction ||
     !registry ||
     loadingRegistry
 
   const handleStake = async () => {
-    if (stakeDisabled) return
+    if (stakeDisabled) {
+      const reasons: string[] = []
+      if (!diagnosticsComplete) reasons.push("Diagnostics not complete")
+      if (runningDiagnostics) reasons.push("Diagnostics running")
+      if (isStaking) reasons.push("Already staking")
+      if (!wallet.connected) reasons.push("Wallet not connected")
+      if (!wallet.publicKey) reasons.push("No public key")
+      if (!wallet.sendTransaction) reasons.push("Wallet sendTransaction not available")
+      if (!registry) reasons.push("Registry not loaded")
+      if (loadingRegistry) reasons.push("Registry loading")
+      setLogs((prev) => [...prev, `> [ERROR] Cannot stake: ${reasons.join(", ")}`])
+      return
+    }
     setIsStaking(true)
     setLogs((prev) => [...prev, "> ARMING STAKE TX...", "> FUNDING ESCROW VAULT..."])
     try {
+      // Create wallet adapter compatible with Anchor
+      // Use sendTransaction as signTransaction if signTransaction is not available
+      const anchorWallet = {
+        publicKey: wallet.publicKey!,
+        signTransaction: wallet.signTransaction || wallet.sendTransaction!,
+        signAllTransactions: wallet.signAllTransactions || (async (txs: any[]) => {
+          const signed = []
+          for (const tx of txs) {
+            signed.push(await wallet.sendTransaction!(tx, connection))
+          }
+          return signed
+        }),
+        sendTransaction: wallet.sendTransaction!,
+      } as any
+
       const { signature, agentPda } = await registerAgent({
         connection,
-        wallet: wallet as any,
+        wallet: anchorWallet,
         name: codename,
         url: endpoint,
-        tags: [strategy],
+        tags: [strategy || "DEGEN_SNIPER"],
       })
       setTxSig(signature)
       setLogs((prev) => [
@@ -173,10 +248,139 @@ export default function NewAgentPage() {
         `> AGENT PDA: ${agentPda.toBase58()}`,
       ])
     } catch (error: any) {
-      const message = error?.message || "Stake failed"
+      console.error("Stake error:", error)
+      const message = error?.message || error?.toString() || "Stake failed"
       setLogs((prev) => [...prev, `> [ERROR] ${message}`])
+      // Show more detailed error if available
+      if (error?.logs) {
+        setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
+      }
     } finally {
       setIsStaking(false)
+      setHoldProgress(0)
+      setIsHolding(false)
+    }
+  }
+
+  // Press and hold handlers
+  const handleMouseDown = () => {
+    if (stakeDisabled) return
+    setIsHolding(true)
+    setHoldProgress(0)
+    const interval = setInterval(() => {
+      setHoldProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval)
+          handleStake()
+          return 100
+        }
+        return prev + 2
+      })
+    }, 30) // Complete in ~1.5 seconds
+
+    // Store interval to clear on mouse up
+    ;(window as any).__stakeHoldInterval = interval
+  }
+
+  const handleMouseUp = () => {
+    if ((window as any).__stakeHoldInterval) {
+      clearInterval((window as any).__stakeHoldInterval)
+      delete (window as any).__stakeHoldInterval
+    }
+    if (holdProgress < 100) {
+      setHoldProgress(0)
+      setIsHolding(false)
+    }
+  }
+
+  const handleMouseLeave = () => {
+    handleMouseUp()
+  }
+
+  const handleInitializeRegistry = async () => {
+    if (!wallet.connected || !wallet.publicKey || !wallet.sendTransaction) {
+      setLogs((prev) => [...prev, "> [ERROR] Wallet not connected"])
+      return
+    }
+
+    setIsInitializing(true)
+    setLogs((prev) => [...prev, "> INITIALIZING REGISTRY...", "> DEPLOYING ON-CHAIN REGISTRY..."])
+    try {
+      // Create wallet adapter compatible with Anchor
+      const anchorWallet = {
+        publicKey: wallet.publicKey!,
+        signTransaction: wallet.signTransaction || wallet.sendTransaction!,
+        signAllTransactions: wallet.signAllTransactions || (async (txs: any[]) => {
+          const signed = []
+          for (const tx of txs) {
+            signed.push(await wallet.sendTransaction!(tx, connection))
+          }
+          return signed
+        }),
+        sendTransaction: wallet.sendTransaction!,
+      } as any
+
+      const { signature, registryPda } = await initializeRegistry({
+        connection,
+        wallet: anchorWallet,
+        bondLamports: 5 * LAMPORTS_PER_SOL, // 5 SOL
+        slashPenaltyLamports: 1 * LAMPORTS_PER_SOL, // 1 SOL
+      })
+
+      setLogs((prev) => [
+        ...prev,
+        `> [SUCCESS] REGISTRY INITIALIZED`,
+        `> TX: ${signature}`,
+        `> REGISTRY PDA: ${registryPda.toBase58()}`,
+        "> RELOADING REGISTRY...",
+      ])
+
+      // Reload registry
+      await loadRegistry()
+    } catch (error: any) {
+      console.error("Initialize registry error:", error)
+      
+      // Check for program not deployed error
+      const errorMessage = error?.message || error?.toString() || ""
+      const transactionMessage = error?.transactionMessage || ""
+      const isProgramNotDeployed = 
+        error?.isProgramNotDeployed ||
+        errorMessage.includes("program that does not exist") ||
+        errorMessage.includes("Program account does not exist") ||
+        errorMessage.includes("is not deployed") ||
+        transactionMessage.includes("program that does not exist") ||
+        transactionMessage.includes("Program account does not exist")
+      
+      if (isProgramNotDeployed) {
+        const programId = error?.programId || "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
+        setLogs((prev) => [
+          ...prev,
+          `> [ERROR] AGENT REGISTRY PROGRAM NOT DEPLOYED`,
+          `> Program ID: ${programId}`,
+          `> The on-chain program does not exist yet.`,
+          `> `,
+          `> TO DEPLOY THE PROGRAM:`,
+          `> 1. cd stake/`,
+          `> 2. anchor build`,
+          `> 3. anchor deploy --provider.cluster devnet`,
+          `> 4. Copy the deployed program ID from the output`,
+          `> 5. Update AGENT_REGISTRY_PROGRAM_ID in`,
+          `>    frontend/lib/stake/agent-registry-idl.ts`,
+          `> `,
+          `> Then refresh this page and try again.`,
+        ])
+      } else {
+        const message = errorMessage || "Failed to initialize registry"
+        setLogs((prev) => [...prev, `> [ERROR] ${message}`])
+        if (error?.logs) {
+          setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
+        }
+        if (transactionMessage) {
+          setLogs((prev) => [...prev, `> [TX ERROR] ${transactionMessage}`])
+        }
+      }
+    } finally {
+      setIsInitializing(false)
     }
   }
 
@@ -199,26 +403,6 @@ export default function NewAgentPage() {
             <p className="mt-2 text-sm text-slate-400">
               Register your autonomous agent for the Arena. Compliance verification required.
             </p>
-          </div>
-          <div className="flex flex-col items-end gap-3 text-right">
-            <div className="flex items-center gap-3 rounded border border-cyan-500/40 bg-black/50 px-4 py-2 shadow-[0_0_20px_rgba(0,255,255,0.15)]">
-              <Wallet className="h-4 w-4 text-emerald-400" />
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">Wallet Balance</p>
-                <p className="text-lg font-semibold text-emerald-300">
-                  ◎ {walletBalance !== null ? walletBalance.toFixed(2) : "--"} SOL
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 rounded border border-amber-400/50 bg-black/60 px-3 py-2 text-xs uppercase tracking-wide">
-              <Network className="h-4 w-4 text-cyan-300" />
-              <span className={cn("text-amber-200", wallet.connected && "text-emerald-300")}>
-                {wallet.connected ? "Connected" : "Not Connected"}
-              </span>
-              <span className="text-slate-500">/</span>
-              <span className="text-emerald-300">{shortKey}</span>
-            </div>
-            <WalletMultiButton className="!h-10 !rounded border border-cyan-500/50 !bg-cyan-600/80 !px-3 !text-xs !font-semibold uppercase tracking-wide shadow-[0_0_15px_rgba(0,243,255,0.35)]" />
           </div>
         </div>
 
@@ -408,13 +592,25 @@ export default function NewAgentPage() {
             <button
               type="button"
               disabled={stakeDisabled}
-              onClick={handleStake}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+              onTouchStart={handleMouseDown}
+              onTouchEnd={handleMouseUp}
               className={cn(
                 "group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-lg border border-amber-500/60 bg-gradient-to-r from-red-700 via-amber-600 to-amber-400 px-6 py-4 text-lg font-semibold uppercase tracking-[0.2em] text-black shadow-[0_0_30px_rgba(255,176,0,0.4)] transition",
                 "active:translate-y-0.5",
-                stakeDisabled && "cursor-not-allowed opacity-70 saturate-50"
+                stakeDisabled && "cursor-not-allowed opacity-70 saturate-50",
+                isHolding && !stakeDisabled && "ring-2 ring-amber-300 ring-offset-2 ring-offset-black"
               )}
             >
+              {/* Hold progress bar */}
+              {isHolding && !stakeDisabled && (
+                <div
+                  className="absolute bottom-0 left-0 h-1 bg-amber-200 transition-all duration-75 ease-linear"
+                  style={{ width: `${holdProgress}%` }}
+                />
+              )}
               <span className="absolute inset-0 bg-[linear-gradient(120deg,rgba(0,0,0,0.25),transparent,rgba(255,255,255,0.15))] opacity-60 transition duration-500 group-hover:opacity-90" />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-black/60">PRESS & HOLD</span>
               <span className="relative flex items-center gap-3">
@@ -430,9 +626,74 @@ export default function NewAgentPage() {
               </span>
               <span className="flex items-center gap-2">
                 <Timer className="h-3.5 w-3.5 text-amber-200" />
-                {wallet.connected ? "Wallet: Solflare ready" : "Connect wallet to proceed"}
+                {wallet.connected && wallet.publicKey
+                  ? `Wallet: ${wallet.publicKey.toBase58().slice(0, 4)}...${wallet.publicKey.toBase58().slice(-4)}`
+                  : "Connect wallet to proceed"}
               </span>
             </div>
+            {stakeDisabled && diagnosticsComplete && (
+              <div className="mt-2 space-y-2">
+                <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  <div className="font-semibold uppercase tracking-[0.18em] text-amber-300">Stake Disabled</div>
+                  <div className="mt-1 space-y-1 text-amber-200/90">
+                    {!wallet.connected && <div>• Wallet not connected</div>}
+                    {wallet.connected && !wallet.publicKey && <div>• No public key available</div>}
+                    {wallet.connected && wallet.publicKey && !wallet.sendTransaction && <div>• Wallet sendTransaction not available</div>}
+                    {!registry && !loadingRegistry && <div>• Registry not found - Initialize registry first</div>}
+                    {loadingRegistry && <div>• Loading registry...</div>}
+                    {isStaking && <div>• Transaction in progress</div>}
+                    {runningDiagnostics && <div>• Diagnostics still running</div>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {programDeployed === false && (
+                    <div className="flex-1 rounded border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+                      <div className="font-semibold uppercase tracking-[0.18em] text-rose-300 mb-1">Program Not Deployed</div>
+                      <div className="text-rose-200/90 space-y-1">
+                        <div>Deploy the program first:</div>
+                        <div className="font-mono text-[10px]">1. cd stake/</div>
+                        <div className="font-mono text-[10px]">2. anchor build</div>
+                        <div className="font-mono text-[10px]">3. anchor deploy --provider.cluster devnet</div>
+                        <div className="font-mono text-[10px]">4. Update AGENT_REGISTRY_PROGRAM_ID</div>
+                      </div>
+                    </div>
+                  )}
+                  {programDeployed === true && !registry && !loadingRegistry && wallet.connected && wallet.publicKey && typeof wallet.sendTransaction === "function" && (
+                    <button
+                      type="button"
+                      onClick={handleInitializeRegistry}
+                      disabled={isInitializing}
+                      className={cn(
+                        "group relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-lg border border-cyan-500/60 bg-gradient-to-r from-cyan-700 via-cyan-600 to-cyan-400 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-black shadow-[0_0_30px_rgba(0,243,255,0.4)] transition",
+                        "active:translate-y-0.5",
+                        isInitializing && "cursor-not-allowed opacity-70"
+                      )}
+                    >
+                      <span className="absolute inset-0 bg-[linear-gradient(120deg,rgba(0,0,0,0.25),transparent,rgba(255,255,255,0.15))] opacity-60 transition duration-500 group-hover:opacity-90" />
+                      <span className="relative flex items-center gap-3">
+                        {isInitializing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Network className="h-4 w-4" />}
+                        {isInitializing ? "Initializing..." : "Initialize Registry"}
+                      </span>
+                    </button>
+                  )}
+                  {(!registry || loadingRegistry) && wallet.connected && (
+                    <button
+                      type="button"
+                      onClick={loadRegistry}
+                      disabled={loadingRegistry}
+                      className={cn(
+                        "group relative flex items-center justify-center gap-2 overflow-hidden rounded-lg border border-slate-500/60 bg-slate-800/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 shadow-[0_0_15px_rgba(148,163,184,0.2)] transition",
+                        "active:translate-y-0.5",
+                        loadingRegistry && "cursor-not-allowed opacity-70"
+                      )}
+                    >
+                      {loadingRegistry ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ActivitySquare className="h-3.5 w-3.5" />}
+                      Retry
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {txSig && (
               <div className="mt-3 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
                 <div className="font-semibold uppercase tracking-[0.18em] text-emerald-300">Stake Submitted</div>

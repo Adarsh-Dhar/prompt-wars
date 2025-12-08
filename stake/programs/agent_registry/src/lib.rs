@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
+use anchor_lang::solana_program::sysvar::Sysvar;
 
-declare_id!("AgNtRgstry111111111111111111111111111111111");
+declare_id!("CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8");
 
 // Seeds
 const REGISTRY_SEED: &[u8] = b"registry";
@@ -29,7 +30,7 @@ pub mod agent_registry {
         registry.authority = ctx.accounts.authority.key();
         registry.bond_lamports = bond_lamports;
         registry.slash_penalty_lamports = slash_penalty_lamports.min(bond_lamports);
-        registry.bump = *ctx.bumps.get("registry").unwrap();
+        registry.bump = ctx.bumps.registry;
         Ok(())
     }
 
@@ -43,21 +44,9 @@ pub mod agent_registry {
 
         let registry = &ctx.accounts.registry;
         let payer = &ctx.accounts.payer;
-        let vault = &ctx.accounts.vault;
-
-        // Transfer bond into escrow vault PDA
-        transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                Transfer {
-                    from: payer.to_account_info(),
-                    to: vault.to_account_info(),
-                },
-            ),
-            registry.bond_lamports,
-        )?;
-
         let agent = &mut ctx.accounts.agent;
+        
+        // Initialize agent first to get its key
         agent.authority = payer.key();
         agent.agent_wallet = ctx.accounts.agent_wallet.key();
         agent.name = name;
@@ -66,7 +55,52 @@ pub mod agent_registry {
         agent.bond_lamports = registry.bond_lamports;
         agent.request_count = 0;
         agent.pending_request = None;
-        agent.bump = *ctx.bumps.get("agent").unwrap();
+        agent.bump = ctx.bumps.agent;
+
+        // Verify and initialize vault PDA
+        let agent_key = agent.key();
+        let (expected_vault, vault_bump) = Pubkey::find_program_address(
+            &[VAULT_SEED, agent_key.as_ref()],
+            ctx.program_id,
+        );
+        require_keys_eq!(ctx.accounts.vault.key(), expected_vault, AgentRegistryError::InvalidRequest);
+        
+        // Initialize vault if needed (create account with rent exemption)
+        let vault_lamports = ctx.accounts.vault.to_account_info().lamports();
+        let rent = Rent::get()?;
+        let required_lamports = rent.minimum_balance(8);
+        if vault_lamports < required_lamports {
+            let create_account_ix = anchor_lang::solana_program::system_instruction::create_account(
+                &payer.key(),
+                &expected_vault,
+                required_lamports,
+                8,
+                &ctx.program_id,
+            );
+            anchor_lang::solana_program::program::invoke_signed(
+                &create_account_ix,
+                &[
+                    payer.to_account_info(),
+                    ctx.accounts.vault.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
+                &[&[VAULT_SEED, agent_key.as_ref(), &[vault_bump]]],
+            )?;
+        }
+
+        // Transfer bond into escrow vault PDA
+        transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                Transfer {
+                    from: payer.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                },
+                &[&[VAULT_SEED, agent_key.as_ref(), &[vault_bump]]],
+            ),
+            registry.bond_lamports,
+        )?;
+
         Ok(())
     }
 
@@ -86,7 +120,7 @@ pub mod agent_registry {
     require!(agent.pending_request.is_none(), AgentRegistryError::ActiveRequestPresent);
 
         let request = &mut ctx.accounts.proof_request;
-        request.agent = ctx.accounts.agent.key();
+        request.agent = agent.key();
         request.market_id = market_id;
         request.requester = ctx.accounts.requester.key();
         request.requested_at = Clock::get()?.unix_timestamp;
@@ -95,12 +129,12 @@ pub mod agent_registry {
         request.slashable = true;
         request.proof_uri = String::new();
         request.log_root = [0u8; 32];
-        request.bump = *ctx.bumps.get("proof_request").unwrap();
+        request.bump = ctx.bumps.proof_request;
 
         agent.request_count = agent.request_count.checked_add(1).ok_or(AgentRegistryError::Overflow)?;
         agent.pending_request = Some(request.key());
 
-        emit!(RequestProof {
+        emit!(RequestProofEvent {
             agent: agent.key(),
             market_id,
             deadline_ts,
@@ -158,10 +192,11 @@ pub mod agent_registry {
         let vault = &mut ctx.accounts.vault;
 
         // Transfer slash penalty to authority
-        let bump = ctx.bumps.get("vault").copied().unwrap();
+        let bump = ctx.bumps.vault;
+        let agent_key = ctx.accounts.agent.key();
         let vault_seeds: &[&[u8]] = &[
             VAULT_SEED,
-            ctx.accounts.agent.key().as_ref(),
+            agent_key.as_ref(),
             &[bump],
         ];
         let signer = &[vault_seeds];
@@ -202,10 +237,11 @@ pub mod agent_registry {
         let lamports = vault.to_account_info().lamports();
         require!(lamports >= agent.bond_lamports, AgentRegistryError::InsufficientVaultBalance);
 
-        let bump = ctx.bumps.get("vault").copied().unwrap();
+        let bump = ctx.bumps.vault;
+        let agent_key = agent.key();
         let vault_seeds: &[&[u8]] = &[
             VAULT_SEED,
-            agent.key().as_ref(),
+            agent_key.as_ref(),
             &[bump],
         ];
         let signer = &[vault_seeds];
@@ -259,14 +295,9 @@ pub struct RegisterAgent<'info> {
     pub agent: Account<'info, Agent>,
     /// Agent wants funds to flow to this wallet; doesn't need to be signer.
     pub agent_wallet: UncheckedAccount<'info>,
-    #[account(
-        init,
-        payer = payer,
-        seeds = [VAULT_SEED, agent.key().as_ref()],
-        bump,
-        space = 8
-    )]
-    pub vault: SystemAccount<'info>,
+    /// CHECK: Vault PDA for agent bond escrow
+    #[account(mut)]
+    pub vault: UncheckedAccount<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -288,7 +319,7 @@ pub struct RequestProof<'info> {
     #[account(
         init,
         payer = requester,
-        seeds = [REQUEST_SEED, agent.key().as_ref(), &market_id],
+        seeds = [REQUEST_SEED, agent.key().as_ref()],
         bump,
         space = 8 + ProofRequest::LEN
     )]
@@ -302,7 +333,7 @@ pub struct RequestProof<'info> {
 pub struct SubmitProof<'info> {
     #[account(mut, seeds = [AGENT_SEED, agent.agent_wallet.as_ref()], bump = agent.bump)]
     pub agent: Account<'info, Agent>,
-    #[account(mut, seeds = [REQUEST_SEED, agent.key().as_ref(), &proof_request.market_id], bump = proof_request.bump)]
+    #[account(mut, seeds = [REQUEST_SEED, agent.key().as_ref()], bump = proof_request.bump)]
     pub proof_request: Account<'info, ProofRequest>,
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -316,7 +347,7 @@ pub struct SlashAgent<'info> {
     pub agent: Account<'info, Agent>,
     #[account(
         mut,
-        seeds = [REQUEST_SEED, agent.key().as_ref(), &proof_request.market_id],
+        seeds = [REQUEST_SEED, agent.key().as_ref()],
         bump = proof_request.bump
     )]
     pub proof_request: Account<'info, ProofRequest>,
@@ -406,7 +437,7 @@ impl ProofRequest {
 
 // Events consumed by frontend/agent server
 #[event]
-pub struct RequestProof {
+pub struct RequestProofEvent {
     pub agent: Pubkey,
     pub market_id: [u8; 32],
     pub deadline_ts: i64,

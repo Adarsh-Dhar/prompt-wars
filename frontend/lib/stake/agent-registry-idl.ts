@@ -1,6 +1,6 @@
 import { Idl } from "@coral-xyz/anchor"
 
-export const AGENT_REGISTRY_PROGRAM_ID = "AgNtRgstry111111111111111111111111111111111"
+export const AGENT_REGISTRY_PROGRAM_ID = "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
 
 export const agentRegistryIdl = {
   version: "0.1.0",

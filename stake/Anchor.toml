@@ -1,8 +1,11 @@
+[toolchain]
+anchor_version = "0.29.0"
+
 [programs.localnet]
-agent_registry = "AgNtRgstry111111111111111111111111111111111"
+agent_registry = "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
 
 [programs.devnet]
-agent_registry = "AgNtRgstry111111111111111111111111111111111"
+agent_registry = "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
 
 [registry]
 url = "https://api.devnet.solana.com"

@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Lock } from "lucide-react"
+import { Lock, CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { fetchAgentLogs, fetchPremiumLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog } from "@/lib/agent-server"
+import { fetchAgentLogs, fetchPremiumLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog, type AgentLogsResponse } from "@/lib/agent-server"
 
 interface ChainOfThoughtProps {
   agentId: string
@@ -281,7 +282,6 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
             </AlertDescription>
           </Alert>
         )}
-      <CardContent className="flex-1 p-0">
         {/* Scrollable terminal */}
         <div className="h-[500px] overflow-hidden">
           {/* Public logs + Alert logs - top half */}
