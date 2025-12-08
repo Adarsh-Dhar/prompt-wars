@@ -390,3 +390,79 @@ export async function getAgentStatus(): Promise<{
   return response.json();
 }
 
+/**
+ * Fetch proof from agent server for specific market (x402 protected)
+ * @param agentUrl Agent server URL
+ * @param marketId Market ID to request proof for
+ * @param connection Solana connection
+ * @param wallet Wallet adapter state
+ * @param paymentSignature Optional existing payment signature
+ * @returns Proof response with chain_root_hash and signature
+ */
+export async function fetchAgentProof(
+  agentUrl: string,
+  marketId: string,
+  connection: Connection,
+  wallet: WalletContextState,
+  paymentSignature?: string | null
+): Promise<AgentLogsResponse> {
+  const signature = paymentSignature || getPaymentToken();
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (signature) {
+    headers['Authorization'] = `Signature ${signature}`;
+  }
+
+  const options: RequestInit = {
+    method: 'GET',
+    headers,
+    cache: 'no-store',
+  };
+
+  // Construct agent server proof endpoint URL
+  const proofUrl = `${agentUrl}/api/proof?market_id=${encodeURIComponent(marketId)}`;
+
+  const data = await fetchWith402Handling<AgentLogsResponse>(
+    proofUrl,
+    options,
+    connection,
+    wallet,
+    true // Auto-retry with payment for proof endpoint
+  );
+
+  // Verify chain integrity and signature if available
+  if (data.signature && data.chain_root_hash && data.agent_public_key && data.logs.length > 0) {
+    try {
+      const verification = await verifyCompleteChain(
+        data.logs as VerifiedLog[],
+        data.chain_root_hash,
+        data.signature,
+        data.agent_public_key
+      );
+
+      if (!verification.valid) {
+        console.error('[CHAIN] Chain verification failed:', verification.errors);
+        // For proof requests, we should reject corrupted chains
+        throw new Error(`Chain verification failed: ${verification.errors.join('; ')}`);
+      } else {
+        (data as any).chainValid = true;
+        if (verification.warnings && verification.warnings.length > 0) {
+          (data as any).verificationWarnings = verification.warnings;
+        }
+      }
+    } catch (error) {
+      console.error('[CHAIN] Error during verification:', error);
+      // Re-throw verification errors for proof requests
+      throw error;
+    }
+  } else {
+    // No signature data - mark as unverified
+    (data as any).chainValid = null;
+  }
+
+  return data;
+}
+
