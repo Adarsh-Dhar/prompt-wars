@@ -82,6 +82,8 @@ pub mod agent_registry {
 
     pub fn request_proof(ctx: Context<RequestProof>, market_id: [u8; 32], deadline_ts: i64) -> Result<()> {
         require_gte!(deadline_ts, Clock::get()?.unix_timestamp, AgentRegistryError::DeadlineInPast);
+    let agent = &mut ctx.accounts.agent;
+    require!(agent.pending_request.is_none(), AgentRegistryError::ActiveRequestPresent);
 
         let request = &mut ctx.accounts.proof_request;
         request.agent = ctx.accounts.agent.key();
@@ -95,7 +97,6 @@ pub mod agent_registry {
         request.log_root = [0u8; 32];
         request.bump = *ctx.bumps.get("proof_request").unwrap();
 
-        let agent = &mut ctx.accounts.agent;
         agent.request_count = agent.request_count.checked_add(1).ok_or(AgentRegistryError::Overflow)?;
         agent.pending_request = Some(request.key());
 
@@ -123,7 +124,7 @@ pub mod agent_registry {
         require!(request.market_id == market_id, AgentRegistryError::InvalidRequest);
 
         // Only agent authority or designated wallet may submit
-        let agent = &ctx.accounts.agent;
+        let agent = &mut ctx.accounts.agent;
         require_keys_eq!(agent.authority, ctx.accounts.authority.key(), AgentRegistryError::Unauthorized);
 
         request.proof_uri = proof_uri;
@@ -131,6 +132,7 @@ pub mod agent_registry {
         request.signature = signature;
         request.fulfilled = true;
         request.slashable = false;
+        agent.pending_request = None;
 
         emit!(ProofSubmitted {
             agent: agent.key(),
@@ -179,6 +181,7 @@ pub mod agent_registry {
         // Mark request as resolved to prevent double slashing
         request.slashable = false;
         request.fulfilled = true;
+        ctx.accounts.agent.pending_request = None;
 
         emit!(AgentSlashed {
             agent: ctx.accounts.agent.key(),

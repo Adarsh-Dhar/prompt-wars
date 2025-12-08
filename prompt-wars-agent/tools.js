@@ -134,7 +134,7 @@ async function fetchPremiumData({ url }) {
         console.log(`[RETRYING] Sending request with proof header...`);
         response = await fetch(url, {
             headers: {
-                'x-payment-token': signature
+                'Authorization': `Signature ${signature}`
             }
         });
     }

@@ -18,8 +18,12 @@ import {
   Wallet,
   Zap,
 } from "lucide-react"
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
+import { useConnection, useWallet } from "@solana/wallet-adapter-react"
+import { LAMPORTS_PER_SOL } from "@solana/web3.js"
 
 import { cn } from "@/lib/utils"
+import { fetchRegistry, registerAgent, RegistryAccount } from "@/lib/stake/client"
 
 type CodenameStatus = "idle" | "checking" | "unique" | "taken"
 type LogLine = {
@@ -42,6 +46,14 @@ export default function NewAgentPage() {
   const [logs, setLogs] = useState<string[]>(["WAITING FOR INPUT..."])
   const [runningDiagnostics, setRunningDiagnostics] = useState(false)
   const [diagnosticsComplete, setDiagnosticsComplete] = useState(false)
+  const [registry, setRegistry] = useState<RegistryAccount | null>(null)
+  const [loadingRegistry, setLoadingRegistry] = useState(false)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [isStaking, setIsStaking] = useState(false)
+  const [txSig, setTxSig] = useState<string | null>(null)
+
+  const { connection } = useConnection()
+  const wallet = useWallet()
 
   // lightweight pseudo-unique check to mimic on-chain unicity feedback
   useEffect(() => {
@@ -92,7 +104,83 @@ export default function NewAgentPage() {
     })
   }
 
-  const stakeDisabled = !diagnosticsComplete || runningDiagnostics
+  useEffect(() => {
+    let cancelled = false
+    async function loadRegistry() {
+      try {
+        setLoadingRegistry(true)
+        const reg = await fetchRegistry(connection)
+        if (!cancelled) setRegistry(reg)
+      } catch (error) {
+        console.error("Failed to fetch registry", error)
+        if (!cancelled) setRegistry(null)
+      } finally {
+        if (!cancelled) setLoadingRegistry(false)
+      }
+    }
+    loadRegistry()
+    return () => {
+      cancelled = true
+    }
+  }, [connection])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadBalance() {
+      if (!wallet.publicKey) {
+        setWalletBalance(null)
+        return
+      }
+      const lamports = await connection.getBalance(wallet.publicKey)
+      if (!cancelled) setWalletBalance(lamports / LAMPORTS_PER_SOL)
+    }
+    loadBalance()
+    const id = setInterval(loadBalance, 8000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [connection, wallet.publicKey])
+
+  const bondSol = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(2) : "5.00"
+
+  const stakeDisabled =
+    !diagnosticsComplete ||
+    runningDiagnostics ||
+    isStaking ||
+    !wallet.connected ||
+    !wallet.publicKey ||
+    !registry ||
+    loadingRegistry
+
+  const handleStake = async () => {
+    if (stakeDisabled) return
+    setIsStaking(true)
+    setLogs((prev) => [...prev, "> ARMING STAKE TX...", "> FUNDING ESCROW VAULT..."])
+    try {
+      const { signature, agentPda } = await registerAgent({
+        connection,
+        wallet: wallet as any,
+        name: codename,
+        url: endpoint,
+        tags: [strategy],
+      })
+      setTxSig(signature)
+      setLogs((prev) => [
+        ...prev,
+        `> [SUCCESS] STAKED BOND FOR ${codename}`,
+        `> TX: ${signature}`,
+        `> AGENT PDA: ${agentPda.toBase58()}`,
+      ])
+    } catch (error: any) {
+      const message = error?.message || "Stake failed"
+      setLogs((prev) => [...prev, `> [ERROR] ${message}`])
+    } finally {
+      setIsStaking(false)
+    }
+  }
+
+  const shortKey = wallet.publicKey ? `${wallet.publicKey.toBase58().slice(0, 4)}...${wallet.publicKey.toBase58().slice(-4)}` : "Disconnected"
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#040506] font-mono text-slate-100">
@@ -117,15 +205,20 @@ export default function NewAgentPage() {
               <Wallet className="h-4 w-4 text-emerald-400" />
               <div>
                 <p className="text-[10px] uppercase tracking-wide text-slate-400">Wallet Balance</p>
-                <p className="text-lg font-semibold text-emerald-300">◎ 12.42 SOL</p>
+                <p className="text-lg font-semibold text-emerald-300">
+                  ◎ {walletBalance !== null ? walletBalance.toFixed(2) : "--"} SOL
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2 rounded border border-amber-400/50 bg-black/60 px-3 py-2 text-xs uppercase tracking-wide">
               <Network className="h-4 w-4 text-cyan-300" />
-              <span className="text-amber-200">Not Connected</span>
+              <span className={cn("text-amber-200", wallet.connected && "text-emerald-300")}>
+                {wallet.connected ? "Connected" : "Not Connected"}
+              </span>
               <span className="text-slate-500">/</span>
-              <span className="text-emerald-300">0x...abc</span>
+              <span className="text-emerald-300">{shortKey}</span>
             </div>
+            <WalletMultiButton className="!h-10 !rounded border border-cyan-500/50 !bg-cyan-600/80 !px-3 !text-xs !font-semibold uppercase tracking-wide shadow-[0_0_15px_rgba(0,243,255,0.35)]" />
           </div>
         </div>
 
@@ -289,7 +382,7 @@ export default function NewAgentPage() {
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-amber-100">
                 <span className="rounded border border-amber-500/60 bg-amber-500/10 px-3 py-1 font-semibold">
-                  SECURITY BOND REQUIRED: 5.00 SOL
+                    SECURITY BOND REQUIRED: {bondSol} SOL
                 </span>
                 <span className="flex items-center gap-2 text-amber-200/80">
                   <AlertTriangle className="h-4 w-4" />
@@ -315,6 +408,7 @@ export default function NewAgentPage() {
             <button
               type="button"
               disabled={stakeDisabled}
+              onClick={handleStake}
               className={cn(
                 "group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-lg border border-amber-500/60 bg-gradient-to-r from-red-700 via-amber-600 to-amber-400 px-6 py-4 text-lg font-semibold uppercase tracking-[0.2em] text-black shadow-[0_0_30px_rgba(255,176,0,0.4)] transition",
                 "active:translate-y-0.5",
@@ -324,8 +418,8 @@ export default function NewAgentPage() {
               <span className="absolute inset-0 bg-[linear-gradient(120deg,rgba(0,0,0,0.25),transparent,rgba(255,255,255,0.15))] opacity-60 transition duration-500 group-hover:opacity-90" />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-black/60">PRESS & HOLD</span>
               <span className="relative flex items-center gap-3">
-                {stakeDisabled ? <Lock className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
-                Stake & Deploy
+                {stakeDisabled ? <Lock className="h-5 w-5" /> : isStaking ? <Loader2 className="h-5 w-5 animate-spin" /> : <Shield className="h-5 w-5" />}
+                {isStaking ? "Submitting..." : "Stake & Deploy"}
               </span>
               <ArrowRight className="relative h-5 w-5" />
             </button>
@@ -336,9 +430,15 @@ export default function NewAgentPage() {
               </span>
               <span className="flex items-center gap-2">
                 <Timer className="h-3.5 w-3.5 text-amber-200" />
-                Cooldown: 3s
+                {wallet.connected ? "Wallet: Solflare ready" : "Connect wallet to proceed"}
               </span>
             </div>
+            {txSig && (
+              <div className="mt-3 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                <div className="font-semibold uppercase tracking-[0.18em] text-emerald-300">Stake Submitted</div>
+                <div className="break-all text-emerald-200/90">Signature: {txSig}</div>
+              </div>
+            )}
           </div>
         </section>
 

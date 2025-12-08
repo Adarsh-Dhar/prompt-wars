@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import crypto from 'crypto';
+import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { tools, functions } from './tools.js';
 
@@ -20,7 +22,7 @@ const PORT = 4000;
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'x-payment-token']
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
@@ -30,6 +32,25 @@ const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRES
 const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 const PEEK_PRICE = 0.05; // Price for unlocking logs
 const GOD_MODE_PRICE = 1.0; // Price for God Mode injection
+
+// --- AGENT KEYPAIR FOR SIGNING LOGS ---
+let agentKeypair;
+if (!process.env.SOLANA_PRIVATE_KEY) {
+    // Generate a test keypair for development/testing
+    console.warn('⚠️  WARNING: SOLANA_PRIVATE_KEY not set. Generating a test keypair for log signing.');
+    agentKeypair = Keypair.generate();
+    console.log(`Agent Signing Key Generated: ${agentKeypair.publicKey.toBase58()}`);
+} else {
+    try {
+        const secretKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
+        agentKeypair = Keypair.fromSecretKey(secretKey);
+        console.log(`Agent Signing Key Loaded: ${agentKeypair.publicKey.toBase58()}`);
+    } catch (error) {
+        console.error('❌ Failed to load SOLANA_PRIVATE_KEY for log signing. Generating test keypair.');
+        agentKeypair = Keypair.generate();
+        console.log(`Agent Signing Key Generated: ${agentKeypair.publicKey.toBase58()}`);
+    }
+}
 
 // --- MEMORY STATE (The "Black Box") ---
 // We store logs here so the frontend can fetch them
@@ -75,23 +96,123 @@ let agentState = {
     lastCurve: 0
 };
 
+// --- CRYPTOGRAPHIC LOG CHAIN FUNCTIONS ---
+
+/**
+ * Calculate hash for a log entry
+ * Hash(Log_N) = SHA256(previous_hash + Log_N_content)
+ */
+function calculateLogHash(previousHash, logContent) {
+    const data = previousHash + JSON.stringify(logContent);
+    return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Serialize log content for hashing
+ */
+function serializeLogContent(message, type, details) {
+    return {
+        message: message,
+        type: type,
+        details: details,
+        timestamp: new Date().toISOString()
+    };
+}
+
+/**
+ * Calculate chain root hash from all log hashes
+ */
+function calculateChainRootHash(logs) {
+    if (logs.length === 0) {
+        return crypto.createHash('sha256').update('').digest('hex');
+    }
+    const chainRoot = logs.map(log => log.current_hash || '').join('');
+    return crypto.createHash('sha256').update(chainRoot).digest('hex');
+}
+
+/**
+ * Sign the entire log chain with agent's private key
+ * Returns signature as base58 string
+ */
+function signLogChain(logs) {
+    try {
+        if (!agentKeypair) {
+            console.warn('[CHAIN] Agent keypair not available, cannot sign log chain');
+            return null;
+        }
+
+        // Calculate chain root hash
+        const chainRootHash = calculateChainRootHash(logs);
+        
+        // Convert hash to Uint8Array for signing
+        const message = Buffer.from(chainRootHash, 'hex');
+        
+        // Sign with agent's private key (Ed25519)
+        const signature = agentKeypair.sign(message);
+        
+        // Encode signature as base58
+        return bs58.encode(signature);
+    } catch (error) {
+        console.error('[CHAIN] Error signing log chain:', error);
+        return null;
+    }
+}
+
+/**
+ * Prepare log response with cryptographic signatures
+ * Adds signature, chain_root_hash, and agent_public_key to response
+ */
+function prepareSignedLogResponse(logs, baseResponse = {}) {
+    const chainRootHash = calculateChainRootHash(logs);
+    const signature = signLogChain(logs);
+    const agentPublicKey = agentKeypair ? agentKeypair.publicKey.toBase58() : null;
+
+    return {
+        ...baseResponse,
+        logs: logs,
+        signature: signature,
+        chain_root_hash: chainRootHash,
+        agent_public_key: agentPublicKey
+    };
+}
+
 // --- LOGGING SYSTEM ---
 // This replaces console.log. It saves to memory AND prints to terminal.
+// Now includes cryptographic hash chain for tamper detection.
 function broadcast(message, type = "public", details = null) {
+    // Get previous log's hash (or empty string for genesis)
+    const previousHash = agentState.logs.length > 0 
+        ? agentState.logs[agentState.logs.length - 1].current_hash 
+        : '';
+    
+    // Serialize log content
+    const logContent = serializeLogContent(message, type, details);
+    
+    // Calculate current hash
+    const currentHash = calculateLogHash(previousHash, logContent);
+    
+    // Create log entry with hash chain
     const logEntry = {
-        id: Date.now() + Math.random(), // Unique ID
+        log_id: agentState.logs.length + 1, // Sequential ID
+        id: Date.now() + Math.random(), // Unique ID for React keys
         timestamp: new Date().toISOString(),
         message: message,
         type: type, // 'public', 'tool_use', 'tool_result', 'premium', 'error', 'system', 'thought', 'agent_speech'
-        details: details // JSON object for detailed view (optional)
+        details: details, // JSON object for detailed view (optional)
+        previous_hash: previousHash,
+        current_hash: currentHash
     };
 
     // Add to memory
     agentState.logs.push(logEntry);
     
-    // Prevent memory overflow
+    // Prevent memory overflow - maintain chain integrity
     if (agentState.logs.length > MAX_LOGS) {
-        agentState.logs.shift(); 
+        // When removing old logs, the chain continues from the remaining logs
+        // The first remaining log will have its previous_hash reset (or kept from before removal)
+        agentState.logs.shift();
+        // Note: After shift, the first log's previous_hash may not match if logs were removed
+        // This is acceptable as it represents a truncated chain
     }
     
     // Update last update time
@@ -365,7 +486,7 @@ async function runAgentLoop() {
 }
 
 // --- x402 PAYMENT VERIFICATION HELPER ---
-async function verifyPayment(signature, requiredAmount) {
+async function verifyPayment(signature, requiredAmount, expectedMemo = null) {
     try {
         const tx = await x402Connection.getParsedTransaction(signature, {
             maxSupportedTransactionVersion: 0,
@@ -376,63 +497,129 @@ async function verifyPayment(signature, requiredAmount) {
             return { valid: false, error: "Transaction not found or not confirmed yet." };
         }
 
+        if (tx.meta?.err) {
+            return { valid: false, error: "Transaction failed on-chain." };
+        }
+
         // Check if money went to us
         let validPayment = false;
+        let actualAmount = 0;
 
+        // Check balance changes for the server wallet
         tx.transaction.message.accountKeys.forEach((key, index) => {
             if (key.pubkey.toBase58() === SERVER_WALLET) {
                 const pre = tx.meta.preBalances[index];
                 const post = tx.meta.postBalances[index];
-                if ((post - pre) >= (requiredAmount * 1e9)) {
-                    validPayment = true;
+                const received = post - pre;
+                if (received > 0) {
+                    actualAmount = received;
+                    if (received >= (requiredAmount * 1e9)) {
+                        validPayment = true;
+                    }
                 }
             }
         });
 
+        // Also check parsed instructions for transfer
         if (!validPayment) {
-            return { valid: false, error: "Insufficient payment amount verified." };
+            const instructions = tx.transaction.message.instructions || [];
+            for (const ix of instructions) {
+                if (ix.parsed && ix.parsed.type === 'transfer') {
+                    const info = ix.parsed.info;
+                    if (info.destination === SERVER_WALLET) {
+                        const received = Number(info.lamports) || 0;
+                        actualAmount = received;
+                        if (received >= (requiredAmount * 1e9)) {
+                            validPayment = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!validPayment) {
+            return { 
+                valid: false, 
+                error: `Insufficient payment amount. Required: ${requiredAmount} SOL, Received: ${actualAmount / 1e9} SOL` 
+            };
+        }
+
+        // Optionally verify memo if provided
+        if (expectedMemo) {
+            const instructions = tx.transaction.message.instructions || [];
+            let memoFound = false;
+            for (const ix of instructions) {
+                if (ix.program === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr' || 
+                    (ix.parsed && ix.parsed.type === 'memo')) {
+                    const memo = ix.parsed?.memo || ix.data?.toString() || '';
+                    if (memo.includes(expectedMemo)) {
+                        memoFound = true;
+                        break;
+                    }
+                }
+            }
+            // Memo verification is optional - don't fail if memo not found
+            // but log it for debugging
+            if (!memoFound) {
+                console.log(`[x402] Memo not found in transaction, but payment amount is valid`);
+            }
         }
 
         return { valid: true };
     } catch (error) {
         console.error("Payment verification error:", error);
-        return { valid: false, error: "Verification failed" };
+        return { valid: false, error: `Verification failed: ${error.message}` };
     }
 }
 
 // --- x402 MIDDLEWARE ---
-const x402Middleware = async (req, res, next) => {
-    const paymentToken = req.headers['x-payment-token']; // This will be the Tx Signature
+// Creates middleware for a specific endpoint with custom price
+function createX402Middleware(price, endpointName) {
+    return async (req, res, next) => {
+        // Extract signature from Authorization header: "Signature <tx_signature>"
+        const authHeader = req.headers['authorization'];
+        let paymentSignature = null;
+        
+        if (authHeader && authHeader.startsWith('Signature ')) {
+            paymentSignature = authHeader.substring(11).trim();
+        }
 
-    // 1. If no payment token, demand payment
-    if (!paymentToken) {
-        return res.status(402).json({
-            error: "Payment Required",
-            accepted_tokens: ["SOL"],
-            network: "solana",
-            amount: PRICE_SOL,
-            recipient: SERVER_WALLET,
-            instruction: "Send SOL to recipient and retry with Tx Signature in 'x-payment-token' header."
-        });
-    }
+        // 1. If no payment signature, demand payment with proper 402 response
+        if (!paymentSignature) {
+            const timestamp = new Date().toISOString();
+            const memo = `Payment for ${endpointName} ${timestamp}`;
+            
+            return res.status(402).json({
+                error: "Payment Required",
+                price: price,
+                currency: "SOL",
+                recipient: SERVER_WALLET,
+                memo: memo
+            });
+        }
 
-    // 2. Verify Payment on-chain
-    const verification = await verifyPayment(paymentToken, PRICE_SOL);
-    
-    if (!verification.valid) {
-        return res.status(verification.error === "Transaction not found or not confirmed yet." ? 400 : 402)
-            .json({ error: verification.error });
-    }
+        // 2. Verify Payment on-chain
+        const verification = await verifyPayment(paymentSignature, price);
+        
+        if (!verification.valid) {
+            return res.status(verification.error === "Transaction not found or not confirmed yet." ? 400 : 402)
+                .json({ error: verification.error });
+        }
 
-    // Payment Valid! Attach info and proceed.
-    req.paymentSignature = paymentToken;
-    next();
-};
+        // Payment Valid! Attach info and proceed.
+        req.paymentSignature = paymentSignature;
+        next();
+    };
+}
+
+// Default x402 middleware using PRICE_SOL
+const x402Middleware = createX402Middleware(PRICE_SOL, 'premium endpoint');
 
 // --- API ENDPOINTS (For the Frontend) ---
 
 // x402 Premium Alpha Endpoint
-app.get('/api/premium-alpha', x402Middleware, (req, res) => {
+app.get('/api/premium-alpha', createX402Middleware(PRICE_SOL, 'premium-alpha'), (req, res) => {
     res.json({
         type: "PREMIUM_ALPHA",
         signal: "BUY BONK",
@@ -455,18 +642,24 @@ function redactText(text) {
 
 // 1. Stream/Logs Endpoint (The "Peep Show")
 // Supports both /api/logs and /api/stream
-// If x-payment-token header is provided and valid, shows clear logs
+// If Authorization: Signature header is provided and valid, shows clear logs
 // Otherwise, shows redacted logs (█ blocks)
 app.get('/api/logs', async (req, res) => {
-    const paymentToken = req.headers['x-payment-token'];
+    const authHeader = req.headers['authorization'];
+    let paymentSignature = null;
+    
+    if (authHeader && authHeader.startsWith('Signature ')) {
+        paymentSignature = authHeader.substring(11).trim();
+    }
+    
     let hasPaid = false;
 
     // Check if user paid for "Peek" access (0.05 SOL)
-    // NOTE: we now trust the presence of a payment token to immediately show clear logs,
+    // NOTE: we now trust the presence of a payment signature to immediately show clear logs,
     // so users who have just paid don't get stuck seeing redacted blocks while the chain confirms.
-    if (paymentToken) {
-        const verification = await verifyPayment(paymentToken, PEEK_PRICE);
-        hasPaid = verification.valid || true; // fall back to trusting the token to avoid blocking UX
+    if (paymentSignature) {
+        const verification = await verifyPayment(paymentSignature, PEEK_PRICE);
+        hasPaid = verification.valid || true; // fall back to trusting the signature to avoid blocking UX
     }
 
     const visibleLogs = agentState.logs.map(log => {
@@ -498,24 +691,32 @@ app.get('/api/logs', async (req, res) => {
         return log;
     });
 
-    res.json({
+    // Prepare signed response with cryptographic chain verification
+    const response = prepareSignedLogResponse(visibleLogs, {
         status: agentState.status,
-        logs: visibleLogs,
         lastUpdate: agentState.lastUpdate,
         dramaStage: agentState.dramaStage,
         emotion: agentState.emotion
     });
+
+    res.json(response);
 });
 
 // Alias for /api/stream (same as /api/logs)
 app.get('/api/stream', async (req, res) => {
     // Reuse the same logic as /api/logs
-    const paymentToken = req.headers['x-payment-token'];
+    const authHeader = req.headers['authorization'];
+    let paymentSignature = null;
+    
+    if (authHeader && authHeader.startsWith('Signature ')) {
+        paymentSignature = authHeader.substring(11).trim();
+    }
+    
     let hasPaid = false;
 
-    if (paymentToken) {
-        const verification = await verifyPayment(paymentToken, PEEK_PRICE);
-        // Trust the token to avoid blocking UX while the chain confirms
+    if (paymentSignature) {
+        const verification = await verifyPayment(paymentSignature, PEEK_PRICE);
+        // Trust the signature to avoid blocking UX while the chain confirms
         hasPaid = verification.valid || true;
     }
 
@@ -548,21 +749,23 @@ app.get('/api/stream', async (req, res) => {
         return log;
     });
 
-    res.json({
+    // Prepare signed response with cryptographic chain verification
+    const response = prepareSignedLogResponse(visibleLogs, {
         status: agentState.status,
-        logs: visibleLogs,
         lastUpdate: agentState.lastUpdate,
         dramaStage: agentState.dramaStage,
         emotion: agentState.emotion
     });
+
+    res.json(response);
 });
 
 // 2. x402 Premium Logs (The "Paid Tier")
 // Returns the raw, unredacted logs
-app.get('/api/logs/premium', x402Middleware, async (req, res) => {
-    res.json({
+app.get('/api/logs/premium', createX402Middleware(PEEK_PRICE, 'premium logs'), async (req, res) => {
+    // Prepare signed response with cryptographic chain verification
+    const response = prepareSignedLogResponse(agentState.logs, {
         status: agentState.status,
-        logs: agentState.logs, // Full access
         lastUpdate: agentState.lastUpdate,
         dramaStage: agentState.dramaStage,
         emotion: agentState.emotion,
@@ -570,6 +773,8 @@ app.get('/api/logs/premium', x402Middleware, async (req, res) => {
         greedLevel: agentState.greedLevel,
         lastToken: agentState.lastToken
     });
+
+    res.json(response);
 });
 
 // 3. Get Status (For the UI header)

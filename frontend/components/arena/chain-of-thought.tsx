@@ -6,11 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { fetchAgentLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog } from "@/lib/agent-server"
-import { sendSolPayment } from "@/lib/payments"
-import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
-import { PublicKey } from "@solana/web3.js"
-import { getConnection as getClusterConnection } from "@/lib/solana/client"
+import { fetchAgentLogs, fetchPremiumLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog } from "@/lib/agent-server"
 
 interface ChainOfThoughtProps {
   agentId: string
@@ -22,6 +18,12 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
   const [loading, setLoading] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
+  const [chainStatus, setChainStatus] = useState<{
+    valid: boolean | null;
+    errors?: string[];
+    warnings?: string[];
+    agentPublicKey?: string;
+  } | null>(null)
   const { publicKey, connected, sendTransaction } = useWallet()
   const { connection } = useConnection()
   const { setVisible } = useWalletModal()
@@ -46,10 +48,28 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
         setLoading(true)
         // Always pass payment token if available
         const token = getPaymentToken()
-        const data = await fetchAgentLogs(token)
+        const data = await fetchAgentLogs(token, connection, connected && publicKey ? { publicKey, connected, sendTransaction } as any : null)
 
         const baseLogs = data.logs || []
         const hasPaymentAccess = timeRemaining !== null && timeRemaining > 0
+
+        // Update chain verification status
+        const responseData = data as AgentLogsResponse & {
+          chainValid?: boolean | null;
+          verificationErrors?: string[];
+          verificationWarnings?: string[];
+        };
+        
+        if (responseData.chainValid !== undefined) {
+          setChainStatus({
+            valid: responseData.chainValid,
+            errors: responseData.verificationErrors,
+            warnings: responseData.verificationWarnings,
+            agentPublicKey: responseData.agent_public_key
+          });
+        } else {
+          setChainStatus(null);
+        }
 
         // Surface a success alert once while access is active
         const paymentOkLog: AgentLog = {
@@ -85,95 +105,65 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
     fetchLogs()
     const interval = setInterval(fetchLogs, 2000) // Poll every 2 seconds
     return () => clearInterval(interval)
-  }, [timeRemaining]) // Re-fetch when payment timer changes
+  }, [timeRemaining, connection, connected, publicKey, sendTransaction]) // Re-fetch when payment timer changes
 
   const handleUnlockLogs = async () => {
-    if (!connected || !publicKey) {
+    if (!connected || !publicKey || !connection) {
       setVisible(true)
       return
     }
 
-    const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
-    if (!serverWallet) {
-      alert("Server wallet not configured")
-      return
-    }
-
-    const serverPubkey = new PublicKey(serverWallet)
-    const paymentConnection = getClusterConnection()
-
-    // Guard against cluster mismatch: wallet must be on the same cluster as paymentConnection
-    const endpoint = (connection as any)?.rpcEndpoint || ""
-    if (endpoint && endpoint.includes("mainnet") && paymentConnection.rpcEndpoint.includes("devnet")) {
-      alert("Please switch wallet to devnet to send this transaction.")
+    if (!sendTransaction) {
+      alert("Wallet sendTransaction not available")
       return
     }
 
     try {
       setUnlocking(true)
-      const userBalanceBefore = await paymentConnection.getBalance(publicKey, "confirmed")
-      const serverBalanceBefore = await paymentConnection.getBalance(serverPubkey, "confirmed")
 
-      // Send payment
-      if (!sendTransaction) {
-        throw new Error("Wallet sendTransaction not available")
-      }
-      const signature = await sendSolPayment(paymentConnection, { publicKey, sendTransaction } as any, serverWallet, PEEK_PRICE)
-      console.info("ChainOfThought payment signature", signature, {
-        amountSol: PEEK_PRICE,
-        userBalanceBefore,
-        serverBalanceBefore,
-      })
-      // Confirm on-chain that payment hit the server wallet for the expected amount
-      await assertPaymentToServer(signature, solToLamports(PEEK_PRICE), publicKey.toBase58())
-
-      const userBalanceAfter = await paymentConnection.getBalance(publicKey, "confirmed")
-      const serverBalanceAfter = await paymentConnection.getBalance(serverPubkey, "confirmed")
-      console.info("ChainOfThought payment confirmed", {
-        signature,
-        amountSol: PEEK_PRICE,
-        userBalanceBefore,
-        userBalanceAfter,
-        serverBalanceBefore,
-        serverBalanceAfter,
-      })
-
-      // Store payment token
-      setPaymentToken(signature)
-      setTimeRemaining(10) // Start with 10 seconds
+      // Use fetchPremiumLogs which handles 402 payment flow automatically
+      // It will trigger payment if needed and retry with signature
+      const wallet = { publicKey, connected, sendTransaction } as any
+      const result = await fetchPremiumLogs(connection, wallet)
       
-      // Immediately refresh logs with payment token
-      const data = await fetchAgentLogs(signature)
-      setLogs(data.logs || [])
-      
-      // Clear any existing timers
-      if (paymentTimerRef.current) {
-        clearTimeout(paymentTimerRef.current)
-      }
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current)
-      }
-      
-      // Start countdown timer
-      countdownTimerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev === null || prev <= 1) {
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      
-      // Set 10-second timer to expire access
-      paymentTimerRef.current = setTimeout(() => {
-        clearPaymentToken()
-        setTimeRemaining(null)
-        paymentTimerRef.current = null
+      // Get the signature from the result (set by fetchPremiumLogs internally)
+      const signature = result.signature
+      if (signature) {
+        setPaymentToken(signature)
+        setTimeRemaining(10) // Start with 10 seconds
+        
+        // Clear any existing timers
+        if (paymentTimerRef.current) {
+          clearTimeout(paymentTimerRef.current)
+        }
         if (countdownTimerRef.current) {
           clearInterval(countdownTimerRef.current)
-          countdownTimerRef.current = null
         }
-      }, 10000) // 10 seconds
+        
+        // Start countdown timer
+        countdownTimerRef.current = setInterval(() => {
+          setTimeRemaining((prev) => {
+            if (prev === null || prev <= 1) {
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+        
+        // Set 10-second timer to expire access
+        paymentTimerRef.current = setTimeout(() => {
+          clearPaymentToken()
+          setTimeRemaining(null)
+          paymentTimerRef.current = null
+          if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current)
+            countdownTimerRef.current = null
+          }
+        }, 10000) // 10 seconds
+      }
+
+      // Update logs with premium data
+      setLogs(result.data.logs || [])
     } catch (error: any) {
       console.error("Error unlocking logs:", error)
       const message = error?.message || "Failed to unlock logs"
@@ -229,14 +219,68 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
     return "text-foreground"
   }
 
+  const getChainStatusIcon = () => {
+    if (chainStatus === null) return null;
+    if (chainStatus.valid === true) {
+      return <CheckCircle2 className="h-4 w-4 text-[var(--neon-green)]" />;
+    }
+    if (chainStatus.valid === false) {
+      return <AlertTriangle className="h-4 w-4 text-[var(--neon-red)]" />;
+    }
+    return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+  };
+
   return (
     <Card className="flex flex-col border-border/50 bg-card/80">
       <CardHeader className="border-b border-border/50 py-3">
-        <CardTitle className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-[var(--neon-magenta)]">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-[var(--neon-magenta)]" />
-          Live Chain of Thought Logs
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-[var(--neon-magenta)]">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-[var(--neon-magenta)]" />
+            Live Chain of Thought Logs
+          </CardTitle>
+          {chainStatus && (
+            <div className="flex items-center gap-2">
+              {getChainStatusIcon()}
+              <span className="font-mono text-xs text-muted-foreground">
+                {chainStatus.valid === true ? 'Verified' : chainStatus.valid === false ? 'Corrupted' : 'Unverified'}
+              </span>
+            </div>
+          )}
+        </div>
       </CardHeader>
+      <CardContent className="flex-1 p-0">
+        {/* Chain Corruption Warning */}
+        {chainStatus && chainStatus.valid === false && chainStatus.errors && chainStatus.errors.length > 0 && (
+          <Alert className="m-4 border-[var(--neon-red)] bg-[var(--neon-red)]/10">
+            <AlertTriangle className="h-4 w-4 text-[var(--neon-red)]" />
+            <AlertTitle className="font-mono text-sm text-[var(--neon-red)]">Chain Corruption Detected</AlertTitle>
+            <AlertDescription className="font-mono text-xs text-muted-foreground mt-2">
+              <div className="space-y-1">
+                {chainStatus.errors.map((error, idx) => (
+                  <div key={idx}>• {error}</div>
+                ))}
+              </div>
+              {chainStatus.agentPublicKey && (
+                <div className="mt-2 pt-2 border-t border-[var(--neon-red)]/20">
+                  Agent: {chainStatus.agentPublicKey.substring(0, 8)}...{chainStatus.agentPublicKey.slice(-8)}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {/* Chain Verification Warnings */}
+        {chainStatus && chainStatus.valid === true && chainStatus.warnings && chainStatus.warnings.length > 0 && (
+          <Alert className="m-4 border-yellow-500/50 bg-yellow-500/10">
+            <AlertCircle className="h-4 w-4 text-yellow-500" />
+            <AlertTitle className="font-mono text-sm text-yellow-500">Verification Warning</AlertTitle>
+            <AlertDescription className="font-mono text-xs text-muted-foreground mt-2">
+              {chainStatus.warnings.map((warning, idx) => (
+                <div key={idx}>• {warning}</div>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )}
       <CardContent className="flex-1 p-0">
         {/* Scrollable terminal */}
         <div className="h-[500px] overflow-hidden">
