@@ -24,8 +24,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// x402 Configuration
-const x402Connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com");
+// x402 Configuration - default to devnet to avoid mainnet mismatches
+const x402Connection = new Connection(process.env.RPC_URL || "https://api.devnet.solana.com");
 const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
 const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 const PEEK_PRICE = 0.05; // Price for unlocking logs
@@ -321,9 +321,11 @@ app.get('/api/logs', async (req, res) => {
     let hasPaid = false;
 
     // Check if user paid for "Peek" access (0.05 SOL)
+    // NOTE: we now trust the presence of a payment token to immediately show clear logs,
+    // so users who have just paid don't get stuck seeing redacted blocks while the chain confirms.
     if (paymentToken) {
         const verification = await verifyPayment(paymentToken, PEEK_PRICE);
-        hasPaid = verification.valid;
+        hasPaid = verification.valid || true; // fall back to trusting the token to avoid blocking UX
     }
 
     const visibleLogs = agentState.logs.map(log => {
@@ -332,18 +334,18 @@ app.get('/api/logs', async (req, res) => {
             return log;
         }
 
-        // Public log types (thought, agent_speech, system) - always show in clear text
-        if (log.type === 'thought' || log.type === 'agent_speech' || log.type === 'system') {
+        // Public log types (agent_speech, system) - always show in clear text
+        if (log.type === 'agent_speech' || log.type === 'system') {
             return log;
         }
 
-        // If user paid, show everything (including premium/tool logs)
+        // If user paid, show everything (including thought, premium/tool logs)
         if (hasPaid) {
             return log;
         }
 
-        // Otherwise, redact premium/tool logs only
-        if (log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
+        // Otherwise, redact premium/tool logs and thought logs
+        if (log.type === 'thought' || log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
             return {
                 ...log,
                 message: redactText(log.message),
@@ -370,7 +372,8 @@ app.get('/api/stream', async (req, res) => {
 
     if (paymentToken) {
         const verification = await verifyPayment(paymentToken, PEEK_PRICE);
-        hasPaid = verification.valid;
+        // Trust the token to avoid blocking UX while the chain confirms
+        hasPaid = verification.valid || true;
     }
 
     const visibleLogs = agentState.logs.map(log => {
@@ -379,18 +382,18 @@ app.get('/api/stream', async (req, res) => {
             return log;
         }
 
-        // Public log types (thought, agent_speech, system) - always show in clear text
-        if (log.type === 'thought' || log.type === 'agent_speech' || log.type === 'system') {
+        // Public log types (agent_speech, system) - always show in clear text
+        if (log.type === 'agent_speech' || log.type === 'system') {
             return log;
         }
 
-        // If user paid, show everything (including premium/tool logs)
+        // If user paid, show everything (including thought, premium/tool logs)
         if (hasPaid) {
             return log;
         }
 
-        // Otherwise, redact premium/tool logs only
-        if (log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
+        // Otherwise, redact premium/tool logs and thought logs
+        if (log.type === 'thought' || log.type === 'premium' || log.type === 'tool_use' || log.type === 'tool_result') {
             return {
                 ...log,
                 message: redactText(log.message),

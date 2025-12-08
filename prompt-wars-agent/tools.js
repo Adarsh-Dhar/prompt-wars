@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Setup Connection & Wallet
-const connection = new Connection(process.env.RPC_URL || 'https://api.mainnet-beta.solana.com');
+// Setup Connection & Wallet - default to devnet so all tx use devnet
+const connection = new Connection(process.env.RPC_URL || 'https://api.devnet.solana.com');
 
 let wallet;
 if (!process.env.SOLANA_PRIVATE_KEY) {

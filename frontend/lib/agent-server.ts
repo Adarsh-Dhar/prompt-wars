@@ -1,7 +1,7 @@
 // Agent Server API utilities
 // Handles communication with the agent server and payment token management
 
-const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4000';
+const AGENT_SERVER_URL = 'http://localhost:4000';
 const PAYMENT_TOKEN_KEY = 'agent-server-payment-token';
 
 export const PEEK_PRICE = 0.05; // SOL
@@ -67,11 +67,11 @@ export async function fetchAgentLogs(paymentToken?: string | null): Promise<Agen
   });
 
   if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
     if (response.status === 402) {
-      const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Payment required');
     }
-    throw new Error(`Failed to fetch logs: ${response.statusText}`);
+    throw new Error(errorData.error || `Failed to fetch logs: ${response.statusText}`);
   }
 
   return response.json();

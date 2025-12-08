@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Clock, Users, TrendingUp } from "lucide-react"
+import { getPaymentToken } from "@/lib/agent-server"
 
 interface ArenaHeaderProps {
   agentId: string
@@ -13,32 +14,59 @@ interface ArenaHeaderProps {
 
 export function ArenaHeader({ agentId, agentName, mission, market, stats }: ArenaHeaderProps) {
   const [timeLeft, setTimeLeft] = useState(0)
+  const [hasPaid, setHasPaid] = useState(false)
+  const [countdown, setCountdown] = useState(10)
+  const lastTokenRef = useRef<string | null>(null)
 
+  // Check payment status and reset countdown when payment detected
   useEffect(() => {
-    if (!mission?.endTime) return
-
-    const calculateTimeLeft = () => {
-      const now = new Date()
-      const end = new Date(mission.endTime)
-      const diff = Math.floor((end.getTime() - now.getTime()) / 1000)
-      setTimeLeft(Math.max(0, diff))
+    const checkPayment = () => {
+      const token = getPaymentToken()
+      const paid = !!token
+      
+      // If payment token changed (new payment) or we just got paid, reset countdown
+      if (paid && (token !== lastTokenRef.current || !hasPaid)) {
+        setCountdown(10)
+        lastTokenRef.current = token
+      } else if (!paid) {
+        lastTokenRef.current = null
+      }
+      
+      setHasPaid(paid)
     }
 
-    calculateTimeLeft()
+    // Check payment status initially and on interval
+    checkPayment()
+    const paymentCheckInterval = setInterval(checkPayment, 500) // Check every 500ms
+
+    return () => clearInterval(paymentCheckInterval)
+  }, [hasPaid])
+
+  // 10-second countdown timer (only when paid)
+  useEffect(() => {
+    if (!hasPaid) {
+      return
+    }
+
+    if (countdown <= 0) {
+      return // Stop at 0
+    }
+
     const timer = setInterval(() => {
-      calculateTimeLeft()
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          return 0 // Stop at 0
+        }
+        return prev - 1
+      })
     }, 1000)
+
     return () => clearInterval(timer)
-  }, [mission?.endTime])
+  }, [hasPaid, countdown])
 
   const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-    if (hours > 0) {
-      return `${hours}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-    }
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    return `00:${secs.toString().padStart(2, "0")}`
   }
 
   const formatVolume = (volume: number) => {
@@ -78,11 +106,11 @@ export function ArenaHeader({ agentId, agentName, mission, market, stats }: Aren
             <TrendingUp className="h-4 w-4 text-[var(--neon-lime)]" />
             <span className="font-mono text-sm text-foreground">{formatVolume(volume)}</span>
           </div>
-          {mission?.endTime && (
+          {hasPaid && (
             <div className="neon-glow-cyan flex items-center gap-2 rounded border border-[var(--neon-cyan)] bg-background px-4 py-2">
               <Clock className="h-4 w-4 text-[var(--neon-cyan)]" />
               <span className="font-mono text-lg font-bold tabular-nums text-[var(--neon-cyan)]">
-                T-{formatTime(timeLeft)}
+                T-{formatTime(countdown)}
               </span>
             </div>
           )}
