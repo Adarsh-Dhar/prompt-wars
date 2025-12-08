@@ -87,3 +87,5 @@
 /x402-server/node_modules/
 /x402-server/.env
 /x402-server/.env*.local
+
+/stake/target/*

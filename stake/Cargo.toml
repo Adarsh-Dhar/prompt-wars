@@ -1,0 +1,11 @@
+[workspace]
+members = [
+  "programs/agent_registry",
+]
+
+[workspace.dependencies]
+anchor-lang = { version = "0.29.0", features = ["init-if-needed"] }
+anchor-spl = "0.29.0"
+
+[profile.release]
+overflow-checks = true

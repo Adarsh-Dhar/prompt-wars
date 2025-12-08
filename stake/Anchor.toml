@@ -1,0 +1,14 @@
+programs = { localnet = ["agent_registry"] }
+
+[programs.localnet]
+agent_registry = "AgNtRgstry111111111111111111111111111111111"
+
+[registry]
+url = "https://api.devnet.solana.com"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "anchor test"
