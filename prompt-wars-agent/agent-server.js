@@ -35,12 +35,44 @@ const GOD_MODE_PRICE = 1.0; // Price for God Mode injection
 // We store logs here so the frontend can fetch them
 const MAX_LOGS = 100; // Keep only last 100 logs to save memory
 
+// --- DRAMA / STATE MACHINE CONFIG ---
+const DRAMA_STATES = ["HUNTING", "APING", "SWEATING", "DUMPING"];
+const DRAMA_TOKENS = ["GIGABRAIN", "SKYNET", "DOGEV2", "ELONAI", "FROG", "PUMP", "NEXUS"];
+const SCENARIOS = [
+    {
+        stage: "HUNTING",
+        public: "Scanning pump.fun for 'AI' tokens...",
+        premium: "Found $SKYNET. Bonding curve at 5%. Top 10 holders are fresh wallets. Risk: MED."
+    },
+    {
+        stage: "APING",
+        public: "Entry signal detected. Constructing transaction...",
+        premium: "Swapping 0.1 SOL -> $SKYNET via Jupiter. Slippage: 5%. Priority Fee: High."
+    },
+    {
+        stage: "SWEATING",
+        public: "Price fluctuating. Analyzing on-chain volume...",
+        premium: "Dev wallet is holding. Bonding curve moved to 20%. HODLING for 'King of the Hill' status."
+    },
+    {
+        stage: "PANIC",
+        public: "Wait... something is wrong. Checking liquidity...",
+        premium: "RUG DETECTED. Liquidity pulled from bonding curve. PANIC SELLING NOW."
+    }
+];
+
 let agentState = {
     status: "IDLE", // IDLE, ANALYZING, TRADING, SLEEPING
     logs: [],       // Stores the Chain of Thought
     lastUpdate: Date.now(),
-    mission: "Autonomous Hedge Fund - Find Alpha and Trade",
-    injectionQueue: [] // God Mode prompts waiting to be processed
+    mission: "Bonding Curve Surfer - Turn 0.1 SOL into 10 SOL",
+    injectionQueue: [], // God Mode prompts waiting to be processed
+    dramaStage: "HUNTING",
+    emotion: "CALM",
+    panicLevel: 0.15,
+    greedLevel: 0.35,
+    lastToken: null,
+    lastCurve: 0
 };
 
 // --- LOGGING SYSTEM ---
@@ -67,6 +99,113 @@ function broadcast(message, type = "public", details = null) {
     
     // Also print to console for dev
     console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+function broadcastPublicPremium(publicMessage, premiumMessage, meta = {}) {
+    if (publicMessage) {
+        broadcast(publicMessage, "agent_speech", meta);
+    }
+    if (premiumMessage) {
+        broadcast(premiumMessage, "premium", meta);
+    }
+}
+
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function assignNewToken() {
+    const token = `$${pickRandom(DRAMA_TOKENS)}`;
+    const ca = `${Math.random().toString(36).substring(2, 4)}...${Math.random().toString(36).substring(2, 4)}`;
+    const curve = Math.floor(Math.random() * 18) + 2; // 2% - 20%
+    agentState.lastToken = token;
+    agentState.lastCurve = curve;
+    return { token, ca, curve };
+}
+
+function getNextDramaStage(current) {
+    const idx = DRAMA_STATES.indexOf(current);
+    if (idx === -1) return "HUNTING";
+    const nextIdx = (idx + 1) % DRAMA_STATES.length;
+    return DRAMA_STATES[nextIdx];
+}
+
+function emitHuntDrama() {
+    const { token, ca, curve } = assignNewToken();
+    broadcastPublicPremium("[INFO] Scanning pump.fun mempool for new mints...", null, { stage: "HUNTING", token });
+    broadcastPublicPremium("[INFO] Filtering for high-velocity social signals...", null, { stage: "HUNTING", token });
+    broadcastPublicPremium(null, `[ALPHA] Detected new token: ${token}`, { stage: "HUNTING", token, ca });
+    broadcastPublicPremium(null, `[DATA] CA: ${ca} | Bonding Curve: ${curve}% filled`, { stage: "HUNTING", token, ca, curve });
+    broadcastPublicPremium(null, `[STRATEGY] Dev wallet holds only 2% (Safe). Buying 0.05 SOL immediately.`, { stage: "HUNTING", token });
+    agentState.emotion = "CURIOUS";
+}
+
+function emitApingDrama() {
+    const apingOptions = SCENARIOS.filter(s => s.stage === "APING");
+    const scenario = (apingOptions.length > 0 ? pickRandom(apingOptions) : pickRandom(SCENARIOS));
+    broadcastPublicPremium(scenario.public, scenario.premium, { stage: "APING", token: agentState.lastToken });
+    broadcastPublicPremium("[INFO] YOLO mode engaged. Priority fee boosted.", null, { stage: "APING" });
+    agentState.emotion = "EUPHORIC";
+}
+
+function emitSweatingDrama() {
+    const token = agentState.lastToken || "$GIGABRAIN";
+    broadcastPublicPremium("[WARN] High volatility detected.", null, { stage: "SWEATING", token });
+    broadcastPublicPremium("[INFO] Heart rate increasing... analyzing holder distribution.", null, { stage: "SWEATING", token });
+    broadcastPublicPremium("[WARN] Re-evaluating position size.", null, { stage: "SWEATING", token });
+    broadcastPublicPremium(null, `[RISK] Buy pressure stopped. Bonding curve stalled at 45%.`, { stage: "SWEATING", token });
+    broadcastPublicPremium(null, `[ALERT] Dev wallet 5x...b2 just sold 10% of supply!`, { stage: "SWEATING", token });
+    broadcastPublicPremium(null, `[DECISION] PANIC CALCULATED: 85%. Preparing to dump.`, { stage: "SWEATING", token });
+    agentState.emotion = "ANXIOUS";
+    agentState.panicLevel = Math.min(1, agentState.panicLevel + 0.2);
+}
+
+function emitDumpingDrama(outcome = "MOON") {
+    const token = agentState.lastToken || "$GIGABRAIN";
+    broadcastPublicPremium("[ACTION] Exiting position...", null, { stage: "DUMPING", token });
+    broadcastPublicPremium("[INFO] Transaction submitted to Solana Mainnet.", null, { stage: "DUMPING", token });
+    if (outcome === "RUG") {
+        broadcastPublicPremium(null, `[EXECUTION] Panic sold ${token} for 0.04 SOL.`, { stage: "DUMPING", token, outcome });
+        broadcastPublicPremium(null, `[LOSS] -0.01 SOL (-20%). Curve collapsed under us.`, { stage: "DUMPING", token, outcome });
+    } else {
+        broadcastPublicPremium(null, `[EXECUTION] Sold ${token} for 0.08 SOL.`, { stage: "DUMPING", token, outcome });
+        broadcastPublicPremium(null, `[PROFIT] +0.03 SOL (+60%). Liquidity was escaping, narrowly avoided rug.`, { stage: "DUMPING", token, outcome });
+    }
+    agentState.emotion = outcome === "RUG" ? "SALTY" : "VICTORIOUS";
+    agentState.panicLevel = 0.1;
+    agentState.greedLevel = 0.3;
+}
+
+function emitGodModeDrama(injection) {
+    broadcastPublicPremium("[ALERT] ⚠️ GOD MODE INTERVENTION DETECTED ⚠️", null, { stage: "GOD_MODE" });
+    broadcastPublicPremium(`[SYSTEM] User '${injection.user || "Anon"}' paid 1.0 SOL to inject prompt.`, null, { stage: "GOD_MODE" });
+    broadcastPublicPremium("[INFO] Overriding core directives...", null, { stage: "GOD_MODE" });
+    broadcastPublicPremium(null, `[INJECTION] Prompt: "${injection.prompt}"`, { stage: "GOD_MODE" });
+    broadcastPublicPremium(null, `[RESPONSE] Acknowledged. Cancelling sell order. Switching strategy to HODL.`, { stage: "GOD_MODE" });
+    agentState.emotion = "OBEDIENT";
+    agentState.dramaStage = "SWEATING";
+}
+
+function runDramaTick(forceStage = null) {
+    const stage = forceStage || agentState.dramaStage || "HUNTING";
+    switch (stage) {
+        case "HUNTING":
+            emitHuntDrama();
+            break;
+        case "APING":
+            emitApingDrama();
+            break;
+        case "SWEATING":
+            emitSweatingDrama();
+            break;
+        case "DUMPING":
+            emitDumpingDrama(agentState.panicLevel > 0.5 ? "RUG" : "MOON");
+            break;
+        default:
+            emitHuntDrama();
+            break;
+    }
+    agentState.dramaStage = getNextDramaStage(stage);
 }
 
 // --- GEMINI AGENT LOGIC ---
@@ -120,10 +259,12 @@ async function runAgentLoop() {
                 const injection = agentState.injectionQueue.shift();
                 msg = `[SYSTEM: GOD MODE ACTIVATED by User ${injection.user || 'Anon'}] ${injection.prompt}`;
                 broadcast(`⚠️ GOD MODE INTERVENTION: "${injection.prompt}"`, "alert");
+                emitGodModeDrama(injection);
                 agentState.status = "ANALYZING";
             } else {
                 agentState.status = "ANALYZING";
                 broadcast("Analyzing market conditions...", "thought");
+                runDramaTick();
             }
             
             // 1. Send message to Gemini
@@ -360,7 +501,9 @@ app.get('/api/logs', async (req, res) => {
     res.json({
         status: agentState.status,
         logs: visibleLogs,
-        lastUpdate: agentState.lastUpdate
+        lastUpdate: agentState.lastUpdate,
+        dramaStage: agentState.dramaStage,
+        emotion: agentState.emotion
     });
 });
 
@@ -408,7 +551,9 @@ app.get('/api/stream', async (req, res) => {
     res.json({
         status: agentState.status,
         logs: visibleLogs,
-        lastUpdate: agentState.lastUpdate
+        lastUpdate: agentState.lastUpdate,
+        dramaStage: agentState.dramaStage,
+        emotion: agentState.emotion
     });
 });
 
@@ -418,7 +563,12 @@ app.get('/api/logs/premium', x402Middleware, async (req, res) => {
     res.json({
         status: agentState.status,
         logs: agentState.logs, // Full access
-        lastUpdate: agentState.lastUpdate
+        lastUpdate: agentState.lastUpdate,
+        dramaStage: agentState.dramaStage,
+        emotion: agentState.emotion,
+        panicLevel: agentState.panicLevel,
+        greedLevel: agentState.greedLevel,
+        lastToken: agentState.lastToken
     });
 });
 
@@ -428,7 +578,12 @@ app.get('/api/status', (req, res) => {
         status: agentState.status,
         mission: agentState.mission,
         logsCount: agentState.logs.length,
-        lastUpdate: agentState.lastUpdate
+        lastUpdate: agentState.lastUpdate,
+        dramaStage: agentState.dramaStage,
+        emotion: agentState.emotion,
+        panicLevel: agentState.panicLevel,
+        greedLevel: agentState.greedLevel,
+        lastToken: agentState.lastToken
     });
 });
 
