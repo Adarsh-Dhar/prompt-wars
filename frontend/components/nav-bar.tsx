@@ -67,12 +67,6 @@ export function NavBar() {
             Arena
           </Link>
           <Link
-            href="/markets"
-            className="font-mono text-sm uppercase tracking-widest text-muted-foreground transition-colors hover:text-[var(--neon-cyan)]"
-          >
-            Markets
-          </Link>
-          <Link
             href="/leaderboard"
             className="font-mono text-sm uppercase tracking-widest text-muted-foreground transition-colors hover:text-[var(--neon-cyan)]"
           >

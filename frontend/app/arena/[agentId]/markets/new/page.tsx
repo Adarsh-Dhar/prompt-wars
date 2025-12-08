@@ -5,6 +5,9 @@ import { useRouter, useParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { useWallet, useConnection } from "@solana/wallet-adapter-react"
+import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { sendSolPayment } from "@/lib/payments"
 
 export default function NewMarketPage() {
   const router = useRouter()
@@ -19,6 +22,9 @@ export default function NewMarketPage() {
   const [feeBps, setFeeBps] = useState("100")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { publicKey, connected, sendTransaction } = useWallet()
+  const { connection } = useConnection()
+  const { setVisible } = useWalletModal()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,6 +38,29 @@ export default function NewMarketPage() {
         return
       }
 
+      if (!connected || !publicKey || !sendTransaction) {
+        setVisible(true)
+        throw new Error("Connect wallet to create a market")
+      }
+
+      const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
+      if (!serverWallet) {
+        throw new Error("Server wallet not configured")
+      }
+
+      const liquidityAmount = Number(initialLiquidity)
+      if (!isFinite(liquidityAmount) || liquidityAmount <= 0) {
+        throw new Error("Initial liquidity must be greater than zero")
+      }
+
+      // Require a real payment equal to the seed liquidity
+      const txSignature = await sendSolPayment(
+        connection,
+        { publicKey, sendTransaction } as any,
+        serverWallet,
+        liquidityAmount
+      )
+
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
       const res = await fetch(`${baseUrl}/api/arena/${agentId}/markets`, {
         method: "POST",
@@ -43,8 +72,10 @@ export default function NewMarketPage() {
           closesAt: closeDate.toISOString(),
           minBet: Number(minBet),
           maxBet: maxBet ? Number(maxBet) : undefined,
-          initialLiquidity: Number(initialLiquidity),
+          initialLiquidity: liquidityAmount,
           feeBps: Number(feeBps),
+          walletAddress: publicKey.toBase58(),
+          txSignature,
         }),
       })
 

@@ -8,6 +8,9 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { fetchAgentLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog } from "@/lib/agent-server"
 import { sendSolPayment } from "@/lib/payments"
+import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
+import { PublicKey } from "@solana/web3.js"
+import { getConnection as getClusterConnection } from "@/lib/solana/client"
 
 interface ChainOfThoughtProps {
   agentId: string
@@ -96,15 +99,45 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
       return
     }
 
+    const serverPubkey = new PublicKey(serverWallet)
+    const paymentConnection = getClusterConnection()
+
+    // Guard against cluster mismatch: wallet must be on the same cluster as paymentConnection
+    const endpoint = (connection as any)?.rpcEndpoint || ""
+    if (endpoint && endpoint.includes("mainnet") && paymentConnection.rpcEndpoint.includes("devnet")) {
+      alert("Please switch wallet to devnet to send this transaction.")
+      return
+    }
+
     try {
       setUnlocking(true)
-      
+      const userBalanceBefore = await paymentConnection.getBalance(publicKey, "confirmed")
+      const serverBalanceBefore = await paymentConnection.getBalance(serverPubkey, "confirmed")
+
       // Send payment
       if (!sendTransaction) {
         throw new Error("Wallet sendTransaction not available")
       }
-      const signature = await sendSolPayment(connection, { publicKey, sendTransaction } as any, serverWallet, PEEK_PRICE)
-      
+      const signature = await sendSolPayment(paymentConnection, { publicKey, sendTransaction } as any, serverWallet, PEEK_PRICE)
+      console.info("ChainOfThought payment signature", signature, {
+        amountSol: PEEK_PRICE,
+        userBalanceBefore,
+        serverBalanceBefore,
+      })
+      // Confirm on-chain that payment hit the server wallet for the expected amount
+      await assertPaymentToServer(signature, solToLamports(PEEK_PRICE), publicKey.toBase58())
+
+      const userBalanceAfter = await paymentConnection.getBalance(publicKey, "confirmed")
+      const serverBalanceAfter = await paymentConnection.getBalance(serverPubkey, "confirmed")
+      console.info("ChainOfThought payment confirmed", {
+        signature,
+        amountSol: PEEK_PRICE,
+        userBalanceBefore,
+        userBalanceAfter,
+        serverBalanceBefore,
+        serverBalanceAfter,
+      })
+
       // Store payment token
       setPaymentToken(signature)
       setTimeRemaining(10) // Start with 10 seconds
@@ -143,7 +176,17 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
       }, 10000) // 10 seconds
     } catch (error: any) {
       console.error("Error unlocking logs:", error)
-      alert(error.message || "Failed to unlock logs")
+      const message = error?.message || "Failed to unlock logs"
+      setLogs((prev) => [
+        {
+          id: `payment-error-${Date.now()}`,
+          type: "alert",
+          timestamp: new Date().toISOString(),
+          message: `Payment failed: ${message}`,
+        },
+        ...(prev || []),
+      ])
+      alert(message)
     } finally {
       setUnlocking(false)
     }

@@ -5,8 +5,9 @@ import { ArrowUp, ArrowDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { sendSolPayment } from "@/lib/payments"
 
 interface PredictionMarketProps {
   market?: any
@@ -14,7 +15,8 @@ interface PredictionMarketProps {
 }
 
 export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected, sendTransaction } = useWallet()
+  const { connection } = useConnection()
   const { setVisible } = useWalletModal()
   const [trades, setTrades] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -51,23 +53,41 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
     }
 
     // Check if wallet is connected
-    if (!connected || !publicKey) {
+    if (!connected || !publicKey || !sendTransaction) {
       setVisible(true)
       return
     }
 
     const walletAddress = publicKey.toBase58()
+    const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
+    if (!serverWallet) {
+      alert("Server wallet not configured")
+      return
+    }
+
+    const amountSol = parseFloat(amount)
+    if (!isFinite(amountSol) || amountSol <= 0) {
+      alert("Enter a valid amount")
+      return
+    }
 
     try {
       setBetting(true)
+      const txSignature = await sendSolPayment(
+        connection,
+        { publicKey, sendTransaction } as any,
+        serverWallet,
+        amountSol
+      )
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
       const res = await fetch(`${baseUrl}/api/markets/${market.id}/trade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           side: position === "MOON" ? "YES" : "NO",
-          amount: parseFloat(amount),
+          amount: amountSol,
           walletAddress,
+          txSignature,
         }),
       })
 

@@ -4,6 +4,11 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { useWallet, useConnection } from "@solana/wallet-adapter-react"
+import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { sendSolPayment } from "@/lib/payments"
+
+const RESOLVE_FEE_SOL = 0.001
 
 interface ResolvePanelProps {
   marketId: string
@@ -16,16 +21,43 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
   const [resolutionTx, setResolutionTx] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const { publicKey, connected, sendTransaction } = useWallet()
+  const { connection } = useConnection()
+  const { setVisible } = useWalletModal()
 
   const handleResolve = async () => {
     setSubmitting(true)
     setMessage(null)
     try {
+      if (!connected || !publicKey || !sendTransaction) {
+        setVisible(true)
+        throw new Error("Connect wallet to resolve")
+      }
+
+      const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
+      if (!serverWallet) {
+        throw new Error("Server wallet not configured")
+      }
+
+      // Require a small real transaction to authorize resolution
+      const txSignature = await sendSolPayment(
+        connection,
+        { publicKey, sendTransaction } as any,
+        serverWallet,
+        RESOLVE_FEE_SOL
+      )
+
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
       const res = await fetch(`${baseUrl}/api/markets/${marketId}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outcome, resolvedBy, resolutionTx }),
+        body: JSON.stringify({
+          outcome,
+          resolvedBy: resolvedBy || publicKey.toBase58(),
+          resolutionTx,
+          walletAddress: publicKey.toBase58(),
+          txSignature,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {

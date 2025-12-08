@@ -26,6 +26,8 @@ export const createMarketSchema = z.object({
   maxBet: z.coerce.number().positive().max(1_000_000).optional(),
   initialLiquidity: z.coerce.number().positive().max(1_000_000).default(10),
   feeBps: z.coerce.number().int().min(0).max(1_000).default(100),
+  walletAddress: z.string().min(1),
+  txSignature: z.string().min(32),
 })
 
 // CPMM trade validation
@@ -33,6 +35,7 @@ export const tradeSchema = z.object({
   side: z.enum(["YES", "NO"]),
   amount: z.coerce.number().positive().max(1_000_000),
   walletAddress: z.string().min(1),
+  txSignature: z.string().min(32),
 })
 
 // Resolve validation
@@ -40,6 +43,8 @@ export const resolveSchema = z.object({
   outcome: z.enum(["YES", "NO", "INVALID"]),
   resolvedBy: z.string().min(1).optional(),
   resolutionTx: z.string().optional(),
+  walletAddress: z.string().min(1),
+  txSignature: z.string().min(32),
 })
 
 // Agent filters

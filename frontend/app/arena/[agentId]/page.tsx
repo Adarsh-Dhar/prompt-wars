@@ -1,7 +1,6 @@
 import { ArenaHeader } from "@/components/arena/arena-header"
 import { AgentView } from "@/components/arena/agent-view"
 import { ChainOfThought } from "@/components/arena/chain-of-thought"
-import { PredictionMarket } from "@/components/arena/prediction-market"
 import { GodModeWhisper } from "@/components/arena/god-mode-whisper"
 import Link from "next/link"
 
@@ -74,16 +73,13 @@ export default async function ArenaPage({
           </Link>
         </div>
 
-        {/* 3-Column Layout */}
-        <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        {/* 2-Column Layout */}
+        <div className="mb-6 grid gap-4 lg:grid-cols-2">
           {/* Left Column - Agent View */}
           <AgentView agentName={agent?.name} stats={stats} />
 
-          {/* Middle Column - Chain of Thought */}
+          {/* Right Column - Chain of Thought */}
           <ChainOfThought agentId={agentId} initialLogs={logs} />
-
-          {/* Right Column - Prediction Market */}
-          <PredictionMarket market={market} agentId={agentId} />
         </div>
 
         {/* God Mode Section */}

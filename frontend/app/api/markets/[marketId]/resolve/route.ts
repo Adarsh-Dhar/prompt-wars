@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { resolveSchema } from "@/lib/validations"
+import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
+
+const RESOLVE_FEE_SOL = 0.001
 
 export async function POST(
   request: Request,
@@ -16,11 +19,19 @@ export async function POST(
       return NextResponse.json({ error: "Market not found" }, { status: 404 })
     }
 
+    // Require a small real transaction to authorize resolution
+    await assertPaymentToServer(
+      data.txSignature,
+      solToLamports(RESOLVE_FEE_SOL),
+      data.walletAddress
+    )
+
     if (market.state === "RESOLVED") {
       return NextResponse.json({ error: "Market already resolved" }, { status: 400 })
     }
 
     const winningPosition = data.outcome === "YES" ? "MOON" : "RUG"
+    const resolvedBy = data.resolvedBy || data.walletAddress
 
     // Mark bets
     await db.bet.updateMany({
@@ -44,7 +55,7 @@ export async function POST(
         state: "RESOLVED",
         outcome: data.outcome,
         resolvedAt: new Date(),
-        resolvedBy: data.resolvedBy,
+        resolvedBy,
         resolutionTx: data.resolutionTx,
       },
     })

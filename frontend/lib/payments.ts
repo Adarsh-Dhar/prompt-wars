@@ -1,5 +1,5 @@
 // Payment utilities for Solana transactions
-import { Connection, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
 /**
@@ -21,14 +21,17 @@ export async function sendSolPayment(
   }
 
   const recipientPubkey = new PublicKey(recipient);
-  const lamports = amountSol * 1e9; // Convert SOL to lamports
+  const lamports = Math.round(amountSol * LAMPORTS_PER_SOL); // Convert SOL to lamports safely (number fits JS safe range for <9e9 SOL)
+  if (lamports <= 0) {
+    throw new Error('Amount must be greater than zero');
+  }
 
   // Create transaction
   const transaction = new Transaction().add(
     SystemProgram.transfer({
       fromPubkey: wallet.publicKey,
       toPubkey: recipientPubkey,
-      lamports: lamports,
+      lamports,
     })
   );
 
@@ -37,13 +40,14 @@ export async function sendSolPayment(
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.publicKey;
 
-  // Send transaction
+  // Send transaction with preflight
   const signature = await wallet.sendTransaction(transaction, connection, {
     skipPreflight: false,
+    preflightCommitment: 'confirmed',
   });
 
   // Wait for confirmation
-  await connection.confirmTransaction(
+  const confirmation = await connection.confirmTransaction(
     {
       blockhash,
       lastValidBlockHeight,
@@ -51,6 +55,10 @@ export async function sendSolPayment(
     },
     'confirmed'
   );
+
+  if (confirmation.value.err) {
+    throw new Error('Transaction failed to confirm');
+  }
 
   return signature;
 }

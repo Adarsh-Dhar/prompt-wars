@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { createMarketSchema } from "@/lib/validations"
 import { generateMintAddresses, getPrices, initialCpmmState } from "@/lib/solana/amm"
+import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
 
 export async function GET(
   request: Request,
@@ -70,6 +71,13 @@ export async function POST(
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
+
+    // Require a real on-chain payment equal to the seed liquidity
+    await assertPaymentToServer(
+      data.txSignature,
+      solToLamports(data.initialLiquidity),
+      data.walletAddress
+    )
 
     const mission = await db.mission.create({
       data: {

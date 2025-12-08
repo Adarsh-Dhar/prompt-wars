@@ -38,6 +38,9 @@ export default function MarketsPage() {
   const [markets, setMarkets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const trendingMarkets = [...markets]
+    .sort((a, b) => b.volumeValue - a.volumeValue)
+    .slice(0, 3)
 
   useEffect(() => {
     async function fetchMarkets() {
@@ -65,7 +68,9 @@ export default function MarketsPage() {
             timeRemaining: calculateTimeRemaining(closesAt),
             participants,
             volume: formatVolume(volume),
+            volumeValue: volume,
             liquidity: formatVolume(Number(market.liquidity || 0)),
+            liquidityValue: Number(market.liquidity || 0),
             state: market.state || mission?.status || "ACTIVE",
           }
         })
@@ -105,6 +110,80 @@ export default function MarketsPage() {
           </Button>
         </div>
 
+        {/* Trending overview */}
+        {!loading && !error && markets.length > 0 && (
+          <section className="mb-10 rounded-xl border border-border/50 bg-card/70 p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="font-mono text-lg font-semibold uppercase tracking-widest text-[var(--neon-cyan)]">
+                  Trending Markets
+                </h2>
+                <p className="font-mono text-xs text-muted-foreground">
+                  Top movers by volume right now
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {trendingMarkets.map((market) => (
+                <Link
+                  key={market.id}
+                  href={`/arena/${agentIdValue}/markets/${market.id}`}
+                  className="group"
+                >
+                  <Card className="h-full border-border/50 bg-card/80 transition-all hover:-translate-y-1 hover:border-[var(--neon-cyan)]/60 hover:shadow-[0_10px_40px_-10px_rgba(0,255,255,0.35)]">
+                    <CardContent className="p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--neon-cyan)]">
+                          {market.category}
+                        </span>
+                        <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+                          {market.state}
+                        </span>
+                      </div>
+                      <h3 className="mb-2 line-clamp-2 font-mono text-sm font-semibold text-foreground">
+                        {market.statement}
+                      </h3>
+                      <p className="mb-3 line-clamp-2 font-mono text-xs text-muted-foreground">
+                        {market.description}
+                      </p>
+                      <div className="mb-3 flex items-center justify-between font-mono text-xs">
+                        <span className="text-[var(--neon-green)]">MOON {market.odds.moon}%</span>
+                        <span className="text-[var(--neon-red)]">RUG {market.odds.rug}%</span>
+                      </div>
+                      <div className="mb-3 grid grid-cols-3 gap-2">
+                        <div className="rounded bg-muted/40 px-2 py-1.5 text-center">
+                          <div className="font-mono text-[10px] uppercase text-muted-foreground">Time</div>
+                          <div className="font-mono text-xs text-foreground">{market.timeRemaining}</div>
+                        </div>
+                        <div className="rounded bg-muted/40 px-2 py-1.5 text-center">
+                          <div className="font-mono text-[10px] uppercase text-muted-foreground">Users</div>
+                          <div className="font-mono text-xs text-foreground">{market.participants}</div>
+                        </div>
+                        <div className="rounded bg-muted/40 px-2 py-1.5 text-center">
+                          <div className="font-mono text-[10px] uppercase text-muted-foreground">Volume</div>
+                          <div className="font-mono text-xs text-foreground">{market.volume}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between font-mono text-[11px] text-[var(--neon-cyan)]">
+                        <span>View market</span>
+                        <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-1 group-hover:-translate-y-0.5" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button
+                asChild
+                className="neon-glow-cyan border border-[var(--neon-cyan)] bg-transparent font-mono text-xs uppercase tracking-[0.18em] text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/10"
+              >
+                <Link href="#all-markets">View all markets</Link>
+              </Button>
+            </div>
+          </section>
+        )}
+
         {/* Markets grid */}
         {loading ? (
           <div className="text-center font-mono text-sm text-muted-foreground py-12">Loading markets...</div>
@@ -115,7 +194,7 @@ export default function MarketsPage() {
             No markets for this agent yet. Start by creating one.
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div id="all-markets" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {markets.map((market) => (
             <Card
               key={market.id}
