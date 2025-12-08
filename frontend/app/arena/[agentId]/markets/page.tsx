@@ -1,3 +1,125 @@
+import Link from "next/link"
+
+async function getAgentMarkets(agentId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const res = await fetch(`${baseUrl}/api/arena/${agentId}/markets`, {
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+  })
+
+  if (!res.ok) {
+    return null
+  }
+
+  return res.json()
+}
+
+export default async function AgentMarketsPage({
+  params,
+}: {
+  params: { agentId: string }
+}) {
+  const { agentId } = params
+  const data = await getAgentMarkets(agentId)
+
+  if (!data) {
+    return (
+      <div className="relative min-h-screen">
+        <div className="relative mx-auto max-w-6xl px-4 py-10">
+          <div className="rounded border border-border/60 bg-card/70 p-6 text-center font-mono text-sm text-muted-foreground">
+            Failed to load markets for this agent.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const markets = data.markets || []
+
+  return (
+    <div className="relative min-h-screen">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--glow-cyan)_0%,_transparent_60%)] opacity-10" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--glow-magenta)_0%,_transparent_50%)] opacity-10" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-10 space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--neon-cyan)]">
+              Agent Markets
+            </p>
+            <h1 className="font-mono text-2xl text-foreground">Prediction markets for this agent</h1>
+            <p className="font-mono text-xs text-muted-foreground">
+              Create a statement and let the crowd bet on it.
+            </p>
+          </div>
+          <Link
+            href={`/arena/${agentId}/markets/new`}
+            className="neon-glow-cyan inline-flex items-center justify-center rounded-md border border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 px-4 py-2 font-mono text-xs uppercase tracking-[0.18em] text-[var(--neon-cyan)] transition hover:bg-[var(--neon-cyan)]/20"
+          >
+            New Market
+          </Link>
+        </div>
+
+        {markets.length === 0 ? (
+          <div className="rounded border border-border/60 bg-card/70 p-6 text-center font-mono text-sm text-muted-foreground">
+            No markets yet. Be the first to{" "}
+            <Link href={`/arena/${agentId}/markets/new`} className="text-[var(--neon-cyan)] underline">
+              create one
+            </Link>
+            .
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {markets.map((market: any) => (
+              <Link
+                key={market.id}
+                href={`/arena/${agentId}/markets/${market.id}`}
+                className="group relative overflow-hidden rounded-lg border border-border/60 bg-card/80 p-4 transition hover:border-[var(--neon-cyan)]/70 hover:shadow-[0_0_30px_rgba(0,255,255,0.12)]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Statement
+                    </p>
+                    <h3 className="font-mono text-lg text-foreground">{market.statement}</h3>
+                    <p className="font-mono text-xs text-muted-foreground line-clamp-2">
+                      {market.description}
+                    </p>
+                  </div>
+                  <span className="rounded bg-[var(--neon-lime)]/15 px-2 py-1 text-[10px] font-mono uppercase text-[var(--neon-lime)]">
+                    {market.odds?.moon ?? 50}% / {market.odds?.rug ?? 50}%
+                  </span>
+                </div>
+                <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  State: {market.state}
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+                  <div className="rounded border border-border/50 bg-muted/40 p-3">
+                    <p className="font-mono text-[11px] uppercase text-muted-foreground">Liquidity</p>
+                    <p className="font-mono text-sm text-foreground">${Number(market.liquidity).toFixed(2)}</p>
+                  </div>
+                  <div className="rounded border border-border/50 bg-muted/40 p-3">
+                    <p className="font-mono text-[11px] uppercase text-muted-foreground">Volume</p>
+                    <p className="font-mono text-sm text-foreground">
+                      ${Number(market.totalVolume || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                  <span>Bets: {market._count?.bets ?? 0}</span>
+                  <span>Trades: {market._count?.trades ?? 0}</span>
+                  <span>Closes: {new Date(market.closesAt).toLocaleString()}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 "use client"
 
 import { useState, useEffect } from "react"

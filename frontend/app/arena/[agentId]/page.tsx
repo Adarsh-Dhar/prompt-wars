@@ -3,6 +3,7 @@ import { AgentView } from "@/components/arena/agent-view"
 import { ChainOfThought } from "@/components/arena/chain-of-thought"
 import { PredictionMarket } from "@/components/arena/prediction-market"
 import { GodModeWhisper } from "@/components/arena/god-mode-whisper"
+import Link from "next/link"
 
 async function getArenaData(agentId: string) {
   try {
@@ -63,6 +64,15 @@ export default async function ArenaPage({
           market={market}
           stats={stats}
         />
+
+        <div className="mb-4 flex justify-end">
+          <Link
+            href={`/arena/${agentId}/markets`}
+            className="neon-glow-cyan inline-flex items-center justify-center rounded-md border border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 px-4 py-2 font-mono text-xs uppercase tracking-[0.18em] text-[var(--neon-cyan)] transition hover:bg-[var(--neon-cyan)]/20"
+          >
+            View all markets
+          </Link>
+        </div>
 
         {/* 3-Column Layout */}
         <div className="mb-6 grid gap-4 lg:grid-cols-3">

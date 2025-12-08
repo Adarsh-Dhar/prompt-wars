@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { marketFiltersSchema } from "@/lib/validations"
+import { getPrices } from "@/lib/solana/amm"
 
 export async function GET(request: Request) {
   try {
@@ -46,14 +47,29 @@ export async function GET(request: Request) {
 
     // Calculate odds from current prices
     const marketsWithOdds = markets.map((market) => {
-      const moonOdds = Number(market.moonPrice) * 100
-      const rugOdds = Number(market.rugPrice) * 100
+      const reserveYes = Number(market.reserveYes || 0)
+      const reserveNo = Number(market.reserveNo || 0)
+      const { priceYes, priceNo } = getPrices(reserveYes, reserveNo)
+      const moonOdds = priceYes * 100
+      const rugOdds = priceNo * 100
       return {
         ...market,
+        statement: market.statement,
+        description: market.description,
+        closesAt: market.closesAt,
         odds: {
           moon: Math.round(moonOdds),
           rug: Math.round(rugOdds),
         },
+        moonPrice: Number(priceYes),
+        rugPrice: Number(priceNo),
+        totalVolume: Number(market.totalVolume),
+        liquidity: Number(market.liquidity),
+        minBet: Number(market.minBet),
+        maxBet: market.maxBet ? Number(market.maxBet) : null,
+        reserveYes,
+        reserveNo,
+        feeBps: market.feeBps,
       }
     })
 

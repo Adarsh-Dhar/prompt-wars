@@ -15,7 +15,7 @@ export async function GET(
       offset: searchParams.get("offset") || "0",
     })
 
-    let user = await db.user.findUnique({
+    const user = await db.user.findUnique({
       where: { walletAddress: wallet },
     })
 

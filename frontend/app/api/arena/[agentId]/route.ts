@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { getPrices } from "@/lib/solana/amm"
 
 export async function GET(
   request: Request,
@@ -71,12 +72,15 @@ export async function GET(
 
     // Calculate odds if market exists
     let odds = null
+    let reserveYes = 0
+    let reserveNo = 0
     if (activeMission?.market) {
-      const moonOdds = Number(activeMission.market.moonPrice) * 100
-      const rugOdds = Number(activeMission.market.rugPrice) * 100
+      reserveYes = Number(activeMission.market.reserveYes || 0)
+      reserveNo = Number(activeMission.market.reserveNo || 0)
+      const { priceYes, priceNo } = getPrices(reserveYes, reserveNo)
       odds = {
-        moon: Math.round(moonOdds),
-        rug: Math.round(rugOdds),
+        moon: Math.round(priceYes * 100),
+        rug: Math.round(priceNo * 100),
       }
     }
 
@@ -110,11 +114,16 @@ export async function GET(
       market: activeMission?.market
         ? {
             id: activeMission.market.id,
-            moonPrice: Number(activeMission.market.moonPrice),
-            rugPrice: Number(activeMission.market.rugPrice),
+            moonPrice: odds ? odds.moon / 100 : Number(activeMission.market.moonPrice),
+            rugPrice: odds ? odds.rug / 100 : Number(activeMission.market.rugPrice),
             totalVolume: Number(activeMission.market.totalVolume),
             liquidity: Number(activeMission.market.liquidity),
             participants: activeMission.market.participants,
+            reserveYes,
+            reserveNo,
+            feeBps: activeMission.market.feeBps,
+            state: activeMission.market.state,
+            outcome: activeMission.market.outcome,
             odds,
             recentTrades,
           }

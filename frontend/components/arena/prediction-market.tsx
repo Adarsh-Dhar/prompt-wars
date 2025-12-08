@@ -18,7 +18,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
   const { setVisible } = useWalletModal()
   const [trades, setTrades] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [shares, setShares] = useState("")
+  const [amount, setAmount] = useState("")
   const [betting, setBetting] = useState(false)
 
   useEffect(() => {
@@ -41,8 +41,14 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
     return () => clearInterval(interval)
   }, [market?.id])
 
+  const isActive = market?.state !== "RESOLVED" && market?.state !== "FROZEN"
+
   const handleBet = async (position: "MOON" | "RUG") => {
-    if (!market?.id || !shares || parseInt(shares) <= 0) return
+    if (!market?.id || !amount || parseFloat(amount) <= 0) return
+    if (!isActive) {
+      alert("Market is closed")
+      return
+    }
 
     // Check if wallet is connected
     if (!connected || !publicKey) {
@@ -55,12 +61,12 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
     try {
       setBetting(true)
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
-      const res = await fetch(`${baseUrl}/api/markets/${market.id}/bet`, {
+      const res = await fetch(`${baseUrl}/api/markets/${market.id}/trade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          position,
-          shares: parseInt(shares),
+          side: position === "MOON" ? "YES" : "NO",
+          amount: parseFloat(amount),
           walletAddress,
         }),
       })
@@ -70,8 +76,8 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
         throw new Error(error.error || "Failed to place bet")
       }
 
-      alert("Bet placed successfully!")
-      setShares("")
+      alert("Trade executed!")
+      setAmount("")
       // Refresh trades
       const tradesRes = await fetch(`${baseUrl}/api/markets/${market.id}/trades?limit=20`)
       if (tradesRes.ok) {
@@ -120,16 +126,16 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
           </div>
         )}
 
-        {/* Shares input */}
+        {/* Amount input */}
         <div className="mb-4">
           <Input
             type="number"
-            placeholder="Shares"
-            value={shares}
-            onChange={(e) => setShares(e.target.value)}
+            placeholder="Amount (SOL)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             className="font-mono text-sm"
-            min="1"
-            disabled={!connected}
+            min="0.1"
+            disabled={!connected || !isActive}
           />
         </div>
 
@@ -138,7 +144,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
           {/* MOON Button */}
           <Button
             onClick={() => handleBet("MOON")}
-            disabled={betting || !shares || parseInt(shares) <= 0 || !connected}
+            disabled={betting || !amount || parseFloat(amount) <= 0 || !connected || !isActive}
             className="group relative h-24 flex-col gap-1 overflow-hidden border-2 border-[var(--neon-green)] bg-[var(--neon-green)]/10 transition-all hover:bg-[var(--neon-green)]/20 hover:shadow-[0_0_30px_rgba(0,255,100,0.3)]"
           >
             <ArrowUp className="h-6 w-6 text-[var(--neon-green)] transition-transform group-hover:-translate-y-1" />
@@ -151,7 +157,7 @@ export function PredictionMarket({ market, agentId }: PredictionMarketProps) {
           {/* RUG Button */}
           <Button
             onClick={() => handleBet("RUG")}
-            disabled={betting || !shares || parseInt(shares) <= 0 || !connected}
+            disabled={betting || !amount || parseFloat(amount) <= 0 || !connected || !isActive}
             className="group relative h-24 flex-col gap-1 overflow-hidden border-2 border-[var(--neon-red)] bg-[var(--neon-red)]/10 transition-all hover:bg-[var(--neon-red)]/20 hover:shadow-[0_0_30px_rgba(255,50,50,0.3)]"
           >
             <ArrowDown className="h-6 w-6 text-[var(--neon-red)] transition-transform group-hover:translate-y-1" />

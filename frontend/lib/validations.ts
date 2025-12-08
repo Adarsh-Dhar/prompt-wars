@@ -15,6 +15,33 @@ export const marketFiltersSchema = z.object({
   offset: z.coerce.number().int().nonnegative().default(0),
 })
 
+// Create market for agent
+export const createMarketSchema = z.object({
+  statement: z.string().min(4),
+  description: z.string().min(4),
+  closesAt: z.coerce
+    .date()
+    .refine((val) => val.getTime() > Date.now(), { message: "Close date must be in the future" }),
+  minBet: z.coerce.number().positive().max(1_000_000).default(1),
+  maxBet: z.coerce.number().positive().max(1_000_000).optional(),
+  initialLiquidity: z.coerce.number().positive().max(1_000_000).default(10),
+  feeBps: z.coerce.number().int().min(0).max(1_000).default(100),
+})
+
+// CPMM trade validation
+export const tradeSchema = z.object({
+  side: z.enum(["YES", "NO"]),
+  amount: z.coerce.number().positive().max(1_000_000),
+  walletAddress: z.string().min(1),
+})
+
+// Resolve validation
+export const resolveSchema = z.object({
+  outcome: z.enum(["YES", "NO", "INVALID"]),
+  resolvedBy: z.string().min(1).optional(),
+  resolutionTx: z.string().optional(),
+})
+
 // Agent filters
 export const agentFiltersSchema = z.object({
   category: z.string().optional(),
