@@ -5,14 +5,14 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-prediction_market = "4gLvyjTChD7X1BRv2Q2djtT9yuYqU3f5uK3biu6KKjph"
+[programs.devnet]
+prediction_market = "FiPoWJW4Rvmk6iqteDQghKCk97sGCb6zhnuAqwhQ314Y"
 
 [registry]
-url = "https://api.apr.dev"
+url = "https://api.devnet.solana.com"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

@@ -117,11 +117,27 @@ async function fetchWith402Handling<T>(
   wallet: WalletContextState | null,
   retryWithPayment: boolean = true
 ): Promise<T> {
-  const response = await fetch(url, options);
+  let response: Response;
+  
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    // Handle network errors (server unreachable, CORS, etc.)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      throw new Error(`Unable to connect to agent server. Please ensure the server is running at ${url}`);
+    }
+    throw new Error(`Network error: ${errorMessage}`);
+  }
 
   // Handle 402 Payment Required
   if (response.status === 402 && retryWithPayment && connection && wallet) {
-    const paymentDetails: PaymentRequiredResponse = await response.json();
+    let paymentDetails: PaymentRequiredResponse;
+    try {
+      paymentDetails = await response.json();
+    } catch (error) {
+      throw new Error('Payment required but could not parse payment details');
+    }
     
     // Process payment
     const signature = await handle402Payment(paymentDetails, connection, wallet);
@@ -138,7 +154,16 @@ async function fetchWith402Handling<T>(
       },
     };
     
-    const retryResponse = await fetch(url, retryOptions);
+    let retryResponse: Response;
+    try {
+      retryResponse = await fetch(url, retryOptions);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        throw new Error(`Unable to connect to agent server after payment. Please ensure the server is running at ${url}`);
+      }
+      throw new Error(`Network error on retry: ${errorMessage}`);
+    }
     
     if (!retryResponse.ok) {
       const errorData = await retryResponse.json().catch(() => ({}));
@@ -353,13 +378,23 @@ export async function fetchPremiumAlpha(
  * @param signature The payment transaction signature
  */
 export async function sendGodModeInjection(prompt: string, signature: string): Promise<{ success: boolean; message: string }> {
-  const response = await fetch(`${AGENT_SERVER_URL}/api/god-mode`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ prompt, signature }),
-  });
+  let response: Response;
+  
+  try {
+    response = await fetch(`${AGENT_SERVER_URL}/api/god-mode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt, signature }),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      throw new Error(`Unable to connect to agent server. Please ensure the server is running at ${AGENT_SERVER_URL}`);
+    }
+    throw new Error(`Network error: ${errorMessage}`);
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -378,10 +413,20 @@ export async function getAgentStatus(): Promise<{
   logsCount: number;
   lastUpdate: number;
 }> {
-  const response = await fetch(`${AGENT_SERVER_URL}/api/status`, {
-    method: 'GET',
-    cache: 'no-store',
-  });
+  let response: Response;
+  
+  try {
+    response = await fetch(`${AGENT_SERVER_URL}/api/status`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      throw new Error(`Unable to connect to agent server. Please ensure the server is running at ${AGENT_SERVER_URL}`);
+    }
+    throw new Error(`Network error: ${errorMessage}`);
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch status: ${response.statusText}`);

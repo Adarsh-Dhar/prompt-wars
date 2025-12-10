@@ -26,6 +26,34 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
   const { connection } = useConnection()
   const { setVisible } = useWalletModal()
 
+  // Helper function to validate if a string is a valid Solana public key
+  const isValidPublicKey = (str: string): boolean => {
+    try {
+      if (!str || typeof str !== 'string') return false
+      // Trim whitespace
+      const trimmed = str.trim()
+      if (trimmed.length === 0) return false
+      // Solana public keys are base58 encoded and typically 32-44 characters
+      if (trimmed.length < 32 || trimmed.length > 44) return false
+      // Check if it's valid base58 (only contains base58 characters)
+      // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+      const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/
+      if (!base58Regex.test(trimmed)) return false
+      // Try to create PublicKey to validate - this will throw if invalid
+      try {
+        // eslint-disable-next-line no-new
+        new PublicKey(trimmed)
+        return true
+      } catch {
+        // Silently catch PublicKey construction errors (e.g., "Non-base58 character")
+        return false
+      }
+    } catch {
+      // Catch any other unexpected errors in validation
+      return false
+    }
+  }
+
   const handleResolve = async () => {
     setSubmitting(true)
     setMessage(null)
@@ -61,8 +89,18 @@ export function ResolvePanel({ marketId, currentOutcome }: ResolvePanelProps) {
         return
       }
 
+      // Validate marketId is a valid public key before on-chain resolve
+      if (!isValidPublicKey(marketId)) {
+        throw new Error("Invalid market ID. Please check the market address.")
+      }
+
       // Use on-chain resolve for YES/NO
-      const marketPda = new PublicKey(marketId)
+      let marketPda: PublicKey
+      try {
+        marketPda = new PublicKey(marketId)
+      } catch (error) {
+        throw new Error("Invalid market ID format. Please check the market address.")
+      }
       const { signature } = await resolveMarket({
         connection,
         wallet: { publicKey, sendTransaction } as any,

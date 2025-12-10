@@ -129,7 +129,7 @@ export default function NewAgentPage() {
       const reg = await fetchRegistry(connection)
       setRegistry(reg)
       if (reg) {
-        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL bond`])
+        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3)} SOL bond`])
       } else {
         setLogs((prev) => [...prev, "> [WARN] Registry not found on-chain"])
       }
@@ -173,7 +173,7 @@ export default function NewAgentPage() {
     }
   }, [connection, wallet.publicKey])
 
-  const bondSol = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(2) : "5.00"
+  const bondSol = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3) : "0.050"
 
   // Debug: Log stake conditions
   useEffect(() => {
@@ -323,8 +323,8 @@ export default function NewAgentPage() {
       const { signature, registryPda } = await initializeRegistry({
         connection,
         wallet: anchorWallet,
-        bondLamports: 5 * LAMPORTS_PER_SOL, // 5 SOL
-        slashPenaltyLamports: 1 * LAMPORTS_PER_SOL, // 1 SOL
+        bondLamports: 0.05 * LAMPORTS_PER_SOL, // 0.05 SOL
+        slashPenaltyLamports: 0.05 * LAMPORTS_PER_SOL, // full bond slashable
       })
 
       setLogs((prev) => [

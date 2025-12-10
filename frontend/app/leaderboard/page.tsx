@@ -28,12 +28,16 @@ export default function LeaderboardPage() {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
         const res = await fetch(`${baseUrl}/api/leaderboard?sortBy=${activeTab}&limit=100`)
         
-        if (!res.ok) throw new Error("Failed to fetch leaderboard")
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: "Unknown error" }))
+          throw new Error(errorData.error || errorData.details || `Failed to fetch leaderboard (${res.status})`)
+        }
         const data = await res.json()
         setLeaderboard(data.leaderboard || [])
       } catch (err) {
         console.error("Error fetching leaderboard:", err)
-        setError("Failed to load leaderboard")
+        const errorMessage = err instanceof Error ? err.message : "Failed to load leaderboard"
+        setError(errorMessage)
       } finally {
         setLoading(false)
       }

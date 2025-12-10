@@ -22,9 +22,9 @@ export const createMarketSchema = z.object({
   closesAt: z.coerce
     .date()
     .refine((val) => val.getTime() > Date.now(), { message: "Close date must be in the future" }),
-  minBet: z.coerce.number().positive().max(1_000_000).default(1),
+  minBet: z.coerce.number().positive().max(1_000_000).default(0.001),
   maxBet: z.coerce.number().positive().max(1_000_000).optional(),
-  initialLiquidity: z.coerce.number().positive().max(1_000_000).default(10),
+  initialLiquidity: z.coerce.number().positive().max(1_000_000).default(0.1),
   feeBps: z.coerce.number().int().min(0).max(1_000).default(100),
   walletAddress: z.string().min(1),
   txSignature: z.string().min(32),

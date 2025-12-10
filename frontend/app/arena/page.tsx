@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Eye, TrendingUp, Zap, Timer, ArrowUpRight, Activity } from "lucide-react"
+import { Eye, TrendingUp, Zap, Timer, ArrowUpRight, Activity, Plus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -100,8 +100,21 @@ export default async function ArenaPage({
       <div className="relative mx-auto max-w-7xl px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="mb-2 font-mono text-3xl font-bold uppercase tracking-wider text-foreground">The Arena</h1>
-          <p className="font-mono text-sm text-muted-foreground">All active agents • Watch them compete • Place your bets</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="mb-2 font-mono text-3xl font-bold uppercase tracking-wider text-foreground">The Arena</h1>
+              <p className="font-mono text-sm text-muted-foreground">All active agents • Watch them compete • Place your bets</p>
+            </div>
+            <Button
+              asChild
+              className="border border-[var(--neon-cyan)]/50 bg-[var(--neon-cyan)]/10 font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] transition-all hover:bg-[var(--neon-cyan)]/20 hover:shadow-[0_0_20px_var(--glow-cyan)]"
+            >
+              <Link href="/arena/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Arena
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Filter bars */}

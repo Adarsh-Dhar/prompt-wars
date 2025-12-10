@@ -1,5 +1,5 @@
 import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor"
-import { Connection, PublicKey, SystemProgram } from "@solana/web3.js"
+import { Connection, PublicKey, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { agentRegistryIdl, AGENT_REGISTRY_PROGRAM_ID, AgentRegistryIdl } from "./agent-registry-idl"
 
 const PROGRAM_ID = new PublicKey(AGENT_REGISTRY_PROGRAM_ID)
@@ -86,8 +86,8 @@ export async function checkProgramDeployed(connection: Connection): Promise<bool
 export async function initializeRegistry(params: {
   connection: Connection
   wallet: Wallet
-  bondLamports?: number // Defaults to 5 SOL
-  slashPenaltyLamports?: number // Defaults to 1 SOL
+  bondLamports?: number // Defaults to 0.05 SOL
+  slashPenaltyLamports?: number // Defaults to full bond
 }) {
   const { connection, wallet, bondLamports, slashPenaltyLamports } = params
   const program = getProgram(connection, wallet)
@@ -153,8 +153,8 @@ export async function initializeRegistry(params: {
   console.log("=".repeat(80))
 
   const registry = getRegistryPda()
-  const defaultBond = bondLamports || 5 * 1e9 // 5 SOL in lamports
-  const defaultSlash = slashPenaltyLamports || 1 * 1e9 // 1 SOL in lamports
+  const defaultBond = bondLamports || LAMPORTS_PER_SOL / 20 // 0.05 SOL in lamports
+  const defaultSlash = slashPenaltyLamports ?? defaultBond // default to full bond slashable
 
   try {
     const sig = await program.methods
