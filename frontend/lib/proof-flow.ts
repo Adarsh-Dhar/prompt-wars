@@ -1,7 +1,7 @@
 // Proof Request Flow Utility
 // Orchestrates the complete proof request flow: requestProof -> fetch -> submitProof
 
-import { Connection, PublicKey } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 import { WalletContextState } from "@solana/wallet-adapter-react"
 import { Wallet, BN } from "@coral-xyz/anchor"
 import { requestProof, submitProof } from "./stake/client"
@@ -56,10 +56,10 @@ export interface ProofFlowResult {
 }
 
 export interface ProofFlowParams {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: WalletContextState
-  agentWallet: PublicKey // Agent's wallet address (used to derive agent PDA)
-  marketId: PublicKey | string // Market ID as PublicKey or string
+  agentWallet: anchor.web3.PublicKey // Agent's wallet address (used to derive agent PDA)
+  marketId: anchor.web3.PublicKey | string // Market ID as PublicKey or string
   agentId: string // Agent ID from database
   agentServerUrl?: string // Optional agent server URL, defaults to AGENT_SERVER_URL
   deadlineTs?: number // Optional deadline timestamp, defaults to 1 hour from now
@@ -94,7 +94,7 @@ export async function requestProofFlow(
 
   // Convert marketId to PublicKey if it's a string
   const marketIdPubkey =
-    typeof marketId === "string" ? new PublicKey(marketId) : marketId
+    typeof marketId === "string" ? new anchor.web3.PublicKey(marketId) : marketId
 
   // Step 1: Request proof on contract
   const walletAdapter: Wallet = {

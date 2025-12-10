@@ -1,4 +1,4 @@
-import { Keypair } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 
 export type CpmmReserves = {
   reserveYes: number
@@ -18,12 +18,12 @@ export type TradeQuote = {
 export function generateMintAddresses() {
   // We currently generate throwaway addresses to keep API responses shaped for on-chain integration.
   // Replace this with real mint creation + tx signatures when wiring to Solana programs.
-  const yesMint = Keypair.generate().publicKey.toBase58()
-  const noMint = Keypair.generate().publicKey.toBase58()
-  const lpMint = Keypair.generate().publicKey.toBase58()
-  const poolAuthority = Keypair.generate().publicKey.toBase58()
-  const poolYesAccount = Keypair.generate().publicKey.toBase58()
-  const poolNoAccount = Keypair.generate().publicKey.toBase58()
+  const yesMint = anchor.web3.Keypair.generate().publicKey.toBase58()
+  const noMint = anchor.web3.Keypair.generate().publicKey.toBase58()
+  const lpMint = anchor.web3.Keypair.generate().publicKey.toBase58()
+  const poolAuthority = anchor.web3.Keypair.generate().publicKey.toBase58()
+  const poolYesAccount = anchor.web3.Keypair.generate().publicKey.toBase58()
+  const poolNoAccount = anchor.web3.Keypair.generate().publicKey.toBase58()
 
   return { yesMint, noMint, lpMint, poolAuthority, poolYesAccount, poolNoAccount }
 }

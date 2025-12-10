@@ -1,24 +1,24 @@
+import * as anchor from "@coral-xyz/anchor";
 import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor"
-import { Connection, PublicKey, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { agentRegistryIdl, AGENT_REGISTRY_PROGRAM_ID, AgentRegistryIdl } from "./agent-registry-idl"
 
-const PROGRAM_ID = new PublicKey(AGENT_REGISTRY_PROGRAM_ID)
+const PROGRAM_ID = new anchor.web3.PublicKey(AGENT_REGISTRY_PROGRAM_ID)
 const REGISTRY_SEED = Buffer.from("registry")
 const AGENT_SEED = Buffer.from("agent")
 const VAULT_SEED = Buffer.from("vault")
 const REQUEST_SEED = Buffer.from("request")
 
 type MinimalWallet = Wallet & {
-  publicKey: PublicKey
+  publicKey: anchor.web3.PublicKey
 }
 
 const dummyWallet: MinimalWallet = {
-  publicKey: PublicKey.default,
+  publicKey: anchor.web3.PublicKey.default,
   signTransaction: async (tx) => tx,
   signAllTransactions: async (txs) => txs,
 }
 
-export function getProgram(connection: Connection, wallet?: Wallet) {
+export function getProgram(connection: anchor.web3.Connection, wallet?: Wallet) {
   const provider = new AnchorProvider(connection, (wallet as MinimalWallet) ?? dummyWallet, {
     commitment: "confirmed",
   })
@@ -26,31 +26,31 @@ export function getProgram(connection: Connection, wallet?: Wallet) {
 }
 
 export function getRegistryPda() {
-  return PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID)[0]
+  return anchor.web3.PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID)[0]
 }
 
-export function getAgentPda(agentWallet: PublicKey) {
-  return PublicKey.findProgramAddressSync([AGENT_SEED, agentWallet.toBuffer()], PROGRAM_ID)[0]
+export function getAgentPda(agentWallet: anchor.web3.PublicKey) {
+  return anchor.web3.PublicKey.findProgramAddressSync([AGENT_SEED, agentWallet.toBuffer()], PROGRAM_ID)[0]
 }
 
-export function getVaultPda(agent: PublicKey) {
-  return PublicKey.findProgramAddressSync([VAULT_SEED, agent.toBuffer()], PROGRAM_ID)[0]
+export function getVaultPda(agent: anchor.web3.PublicKey) {
+  return anchor.web3.PublicKey.findProgramAddressSync([VAULT_SEED, agent.toBuffer()], PROGRAM_ID)[0]
 }
 
-export function getProofRequestPda(agent: PublicKey, marketId: Uint8Array) {
-  return PublicKey.findProgramAddressSync([REQUEST_SEED, agent.toBuffer(), Buffer.from(marketId)], PROGRAM_ID)[0]
+export function getProofRequestPda(agent: anchor.web3.PublicKey, marketId: Uint8Array) {
+  return anchor.web3.PublicKey.findProgramAddressSync([REQUEST_SEED, agent.toBuffer(), Buffer.from(marketId)], PROGRAM_ID)[0]
 }
 
 export type RegistryAccount = {
-  authority: PublicKey
+  authority: anchor.web3.PublicKey
   bondLamports: BN
   slashPenaltyLamports: BN
   bump: number
 }
 
 export type ProofRequestAccount = {
-  agent: PublicKey
-  requester: PublicKey
+  agent: anchor.web3.PublicKey
+  requester: anchor.web3.PublicKey
   marketId: number[] // [u8; 32]
   requestedAt: BN // i64
   deadlineTs: BN // i64
@@ -62,7 +62,7 @@ export type ProofRequestAccount = {
   bump: number
 }
 
-export async function fetchRegistry(connection: Connection) {
+export async function fetchRegistry(connection: anchor.web3.Connection) {
   const program = getProgram(connection)
   const registry = getRegistryPda()
   return program.account.registry.fetchNullable(registry) as Promise<RegistryAccount | null>
@@ -71,7 +71,7 @@ export async function fetchRegistry(connection: Connection) {
 /**
  * Check if the program is deployed on-chain
  */
-export async function checkProgramDeployed(connection: Connection): Promise<boolean> {
+export async function checkProgramDeployed(connection: anchor.web3.Connection): Promise<boolean> {
   try {
     const programInfo = await connection.getAccountInfo(PROGRAM_ID)
     return programInfo !== null
@@ -84,7 +84,7 @@ export async function checkProgramDeployed(connection: Connection): Promise<bool
  * Initialize the registry if it doesn't exist
  */
 export async function initializeRegistry(params: {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: Wallet
   bondLamports?: number // Defaults to 0.05 SOL
   slashPenaltyLamports?: number // Defaults to full bond
@@ -153,7 +153,7 @@ export async function initializeRegistry(params: {
   console.log("=".repeat(80))
 
   const registry = getRegistryPda()
-  const defaultBond = bondLamports || LAMPORTS_PER_SOL / 20 // 0.05 SOL in lamports
+  const defaultBond = bondLamports || anchor.web3.LAMPORTS_PER_SOL / 20 // 0.05 SOL in lamports
   const defaultSlash = slashPenaltyLamports ?? defaultBond // default to full bond slashable
 
   try {
@@ -162,7 +162,7 @@ export async function initializeRegistry(params: {
       .accounts({
         registry,
         authority: wallet.publicKey,
-        systemProgram: SystemProgram.programId,
+        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc()
 
@@ -202,9 +202,9 @@ export async function initializeRegistry(params: {
  * Fetch proof request account from contract
  */
 export async function fetchProofRequest(params: {
-  connection: Connection
-  agentWallet: PublicKey
-  marketId: PublicKey
+  connection: anchor.web3.Connection
+  agentWallet: anchor.web3.PublicKey
+  marketId: anchor.web3.PublicKey
 }): Promise<ProofRequestAccount | null> {
   const { connection, agentWallet, marketId } = params
   const program = getProgram(connection)
@@ -223,7 +223,7 @@ export async function fetchProofRequest(params: {
 }
 
 export async function registerAgent(params: {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: Wallet
   name: string
   url: string
@@ -248,7 +248,7 @@ export async function registerAgent(params: {
       agentWallet: wallet.publicKey,
       vault,
       payer: wallet.publicKey,
-      systemProgram: SystemProgram.programId,
+      systemProgram: anchor.web3.SystemProgram.programId,
     })
     .rpc()
 
@@ -258,7 +258,7 @@ export async function registerAgent(params: {
 /**
  * Convert PublicKey to [u8; 32] array format
  */
-function publicKeyToUint8Array32(pubkey: PublicKey): number[] {
+function publicKeyToUint8Array32(pubkey: anchor.web3.PublicKey): number[] {
   const buffer = pubkey.toBuffer()
   if (buffer.length !== 32) {
     throw new Error(`Invalid PublicKey length: expected 32, got ${buffer.length}`)
@@ -270,10 +270,10 @@ function publicKeyToUint8Array32(pubkey: PublicKey): number[] {
  * Request proof from an agent for a specific market
  */
 export async function requestProof(params: {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: Wallet
-  agentWallet: PublicKey
-  marketId: PublicKey
+  agentWallet: anchor.web3.PublicKey
+  marketId: anchor.web3.PublicKey
   deadlineTs?: BN // Optional, defaults to 1 hour from now
 }) {
   const { connection, wallet, agentWallet, marketId, deadlineTs } = params
@@ -298,7 +298,7 @@ export async function requestProof(params: {
       registry,
       proofRequest,
       requester: wallet.publicKey,
-      systemProgram: SystemProgram.programId,
+      systemProgram: anchor.web3.SystemProgram.programId,
     })
     .rpc()
 
@@ -309,10 +309,10 @@ export async function requestProof(params: {
  * Submit proof to the contract
  */
 export async function submitProof(params: {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: Wallet
-  agentWallet: PublicKey
-  marketId: PublicKey
+  agentWallet: anchor.web3.PublicKey
+  marketId: anchor.web3.PublicKey
   logRoot: Uint8Array // [u8; 32]
   proofUri: string
   signature: Uint8Array // [u8; 64]
@@ -346,7 +346,7 @@ export async function submitProof(params: {
       agent,
       proofRequest,
       authority: wallet.publicKey,
-      systemProgram: SystemProgram.programId,
+      systemProgram: anchor.web3.SystemProgram.programId,
     })
     .rpc()
 

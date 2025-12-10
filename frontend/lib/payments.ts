@@ -1,9 +1,9 @@
 // Payment utilities for Solana transactions
-import { Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
+import * as anchor from "@coral-xyz/anchor";
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
 // Memo program ID (same on all Solana networks)
-const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+const MEMO_PROGRAM_ID = new anchor.web3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 
 /**
  * Create a memo instruction for a transaction
@@ -11,8 +11,8 @@ const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfc
  * @param signerPubkey The public key that will sign the transaction
  * @returns TransactionInstruction
  */
-function createMemoInstruction(memo: string, signerPubkey: PublicKey): TransactionInstruction {
-  return new TransactionInstruction({
+function createMemoInstruction(memo: string, signerPubkey: anchor.web3.PublicKey): anchor.web3.TransactionInstruction {
+  return new anchor.web3.TransactionInstruction({
     keys: [{ pubkey: signerPubkey, isSigner: true, isWritable: false }],
     programId: MEMO_PROGRAM_ID,
     data: Buffer.from(memo, 'utf8'),
@@ -29,7 +29,7 @@ function createMemoInstruction(memo: string, signerPubkey: PublicKey): Transacti
  * @returns Transaction signature
  */
 export async function sendSolPayment(
-  connection: Connection,
+  connection: anchor.web3.Connection,
   wallet: WalletContextState,
   recipient: string,
   amountSol: number,
@@ -39,8 +39,8 @@ export async function sendSolPayment(
     throw new Error('Wallet not connected');
   }
 
-  const recipientPubkey = new PublicKey(recipient);
-  const lamports = Math.round(amountSol * LAMPORTS_PER_SOL); // Convert SOL to lamports safely (number fits JS safe range for <9e9 SOL)
+  const recipientPubkey = new anchor.web3.PublicKey(recipient);
+  const lamports = Math.round(amountSol * anchor.web3.LAMPORTS_PER_SOL); // Convert SOL to lamports safely (number fits JS safe range for <9e9 SOL)
   if (lamports <= 0) {
     throw new Error('Amount must be greater than zero');
   }
@@ -55,8 +55,8 @@ export async function sendSolPayment(
   };
 
   // Create transaction with transfer instruction
-  const transaction = new Transaction().add(
-    SystemProgram.transfer({
+  const transaction = new anchor.web3.Transaction().add(
+    anchor.web3.SystemProgram.transfer({
       fromPubkey: wallet.publicKey,
       toPubkey: recipientPubkey,
       lamports,
@@ -79,7 +79,7 @@ export async function sendSolPayment(
   const balance = await connection.getBalance(wallet.publicKey, 'processed');
   const requiredLamports = lamports + feeLamports;
   if (balance < requiredLamports) {
-    const needed = (requiredLamports - balance) / LAMPORTS_PER_SOL;
+    const needed = (requiredLamports - balance) / anchor.web3.LAMPORTS_PER_SOL;
     throw new Error(`Insufficient SOL to cover ${amountSol} SOL payment plus fees. Need ~${needed.toFixed(4)} more SOL.`);
   }
 

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { tradeSchema } from "@/lib/validations"
 import { getPrices, getTradeQuote } from "@/lib/solana/amm"
-import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
 
 export async function POST(
   request: Request,
@@ -53,9 +52,6 @@ export async function POST(
     if (!isFinite(quote.sharesOut) || quote.sharesOut <= 0) {
       return NextResponse.json({ error: "Trade too large for current liquidity" }, { status: 400 })
     }
-
-    // Ensure on-chain payment for the trade amount
-    await assertPaymentToServer(data.txSignature, solToLamports(data.amount), data.walletAddress)
 
     // Upsert user by wallet
     let user = await db.user.findUnique({

@@ -1,12 +1,12 @@
 // Auto-Resolution Service
 // Automatically resolves markets based on proof data
 
-import { Connection, PublicKey } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 import { Wallet } from "@coral-xyz/anchor"
+import { randomUUID } from "crypto"
 import { fetchProofRequest } from "./stake/client"
 import { fetchAgentProof, AgentLogsResponse } from "./agent-server"
 import { parseLogOutcome, validateProofData, type ProofData } from "./proof-parser"
-import { resolveMarket } from "./prediction-market/client"
 
 const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4000'
 
@@ -20,10 +20,10 @@ export interface AutoResolveResult {
 }
 
 export interface AutoResolveParams {
-  connection: Connection
+  connection: anchor.web3.Connection
   wallet: Wallet
-  agentWallet: PublicKey
-  marketId: PublicKey
+  agentWallet: anchor.web3.PublicKey
+  marketId: anchor.web3.PublicKey
   agentServerUrl?: string
   paymentSignature?: string | null
 }
@@ -182,22 +182,41 @@ export async function autoResolveFromProof(
     )
 
     // Step 6: Resolve market with parsed outcome
-    console.log("[AUTO-RESOLVE] Resolving market on contract...")
-    const { signature } = await resolveMarket({
-      connection,
-      wallet,
-      marketPda: marketId,
-      outcome: logOutcome.outcome,
+    console.log("[AUTO-RESOLVE] Resolving market via API (db-only)...")
+    const txSignature = randomUUID().replace(/-/g, "")
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      process.env.BASE_URL ||
+      ""
+    const resolveUrl = baseUrl
+      ? `${baseUrl}/api/markets/${marketId.toBase58()}/resolve`
+      : `/api/markets/${marketId.toBase58()}/resolve`
+
+    const res = await fetch(resolveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outcome: logOutcome.outcome === "yes" ? "YES" : "NO",
+        resolvedBy: wallet.publicKey?.toBase58(),
+        resolutionTx: txSignature,
+        walletAddress: wallet.publicKey?.toBase58(),
+        txSignature,
+      }),
     })
 
-    console.log("[AUTO-RESOLVE] Market resolved successfully:", signature)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || "Failed to resolve market via API")
+    }
+
+    console.log("[AUTO-RESOLVE] Market resolved successfully via API")
 
     return {
       success: true,
       outcome: logOutcome.outcome,
       confidence: logOutcome.confidence,
       reason: logOutcome.reason,
-      resolutionSignature: signature,
+      resolutionSignature: txSignature,
     }
   } catch (error) {
     console.error("[AUTO-RESOLVE] Error during auto-resolution:", error)

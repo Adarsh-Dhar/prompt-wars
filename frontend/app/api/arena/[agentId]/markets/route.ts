@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { createMarketSchema } from "@/lib/validations"
 import { generateMintAddresses, getPrices, initialCpmmState } from "@/lib/solana/amm"
-import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
+import { randomUUID } from "crypto"
 
 export async function GET(
   request: Request,
@@ -85,13 +85,6 @@ export async function POST(
         return NextResponse.json({ error: "Agent not found" }, { status: 404 })
       }
 
-      // Require a real on-chain payment equal to the seed liquidity
-      await assertPaymentToServer(
-        data.txSignature,
-        solToLamports(data.initialLiquidity),
-        data.walletAddress
-      )
-
       const mission = await db.mission.create({
         data: {
           agentId,
@@ -103,11 +96,9 @@ export async function POST(
         },
       })
 
-      if (!(body as any).marketPda) {
-        return NextResponse.json({ error: "Missing on-chain market PDA" }, { status: 400 })
-      }
-
+      const marketPda = (body as any).marketPda ?? `dummy-${randomUUID().replace(/-/g, "")}`
       const mintAddresses = (body as any).mints ?? generateMintAddresses()
+      const poolVault = (body as any).mints?.poolVault ?? `dummy-${randomUUID().replace(/-/g, "")}`
       const cpmm = initialCpmmState(data.initialLiquidity, data.feeBps)
       const { priceYes, priceNo } = getPrices(cpmm.reserveYes, cpmm.reserveNo)
 
@@ -130,7 +121,8 @@ export async function POST(
           poolAuthority: mintAddresses.poolAuthority,
           poolYesAccount: mintAddresses.poolYesAccount,
           poolNoAccount: mintAddresses.poolNoAccount,
-          marketPda: (body as any).marketPda,
+          poolVault,
+          marketPda,
           reserveYes: cpmm.reserveYes,
           reserveNo: cpmm.reserveNo,
         },
@@ -161,8 +153,8 @@ export async function POST(
           poolAuthority: market.poolAuthority,
           poolYesAccount: market.poolYesAccount,
           poolNoAccount: market.poolNoAccount,
-          poolVault: (body as any).mints?.poolVault ?? null,
-          marketPda: (body as any).marketPda,
+          poolVault,
+          marketPda,
         },
       }
 

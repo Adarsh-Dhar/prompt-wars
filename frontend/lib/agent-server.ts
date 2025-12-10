@@ -1,7 +1,7 @@
 // Agent Server API utilities
 // Handles communication with the agent server and payment token management
 
-import { Connection } from '@solana/web3.js';
+import * as anchor from "@coral-xyz/anchor";
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { sendSolPayment } from './payments';
 import { verifyCompleteChain, type VerifiedLog } from './chain-verification';
@@ -78,7 +78,7 @@ export function clearPaymentToken(): void {
  */
 export async function handle402Payment(
   paymentDetails: PaymentRequiredResponse,
-  connection: Connection,
+  connection: anchor.web3.Connection,
   wallet: WalletContextState
 ): Promise<string> {
   if (!wallet.publicKey || !wallet.sendTransaction) {
@@ -113,7 +113,7 @@ export async function handle402Payment(
 async function fetchWith402Handling<T>(
   url: string,
   options: RequestInit,
-  connection: Connection | null,
+  connection: anchor.web3.Connection | null,
   wallet: WalletContextState | null,
   retryWithPayment: boolean = true
 ): Promise<T> {
@@ -192,7 +192,7 @@ async function fetchWith402Handling<T>(
  */
 export async function fetchAgentLogs(
   paymentSignature?: string | null,
-  connection?: Connection | null,
+  connection?: anchor.web3.Connection | null,
   wallet?: WalletContextState | null
 ): Promise<AgentLogsResponse> {
   const signature = paymentSignature || getPaymentToken();
@@ -262,7 +262,7 @@ export async function fetchAgentLogs(
  * @returns Object with logs data and the signature used
  */
 export async function fetchPremiumLogs(
-  connection: Connection,
+  connection: anchor.web3.Connection,
   wallet: WalletContextState,
   paymentSignature?: string | null
 ): Promise<{ data: AgentLogsResponse; signature: string | null }> {
@@ -337,7 +337,7 @@ export async function fetchPremiumLogs(
  * @param paymentSignature Optional existing payment signature
  */
 export async function fetchPremiumAlpha(
-  connection: Connection,
+  connection: anchor.web3.Connection,
   wallet: WalletContextState,
   paymentSignature?: string | null
 ): Promise<{
@@ -447,7 +447,7 @@ export async function getAgentStatus(): Promise<{
 export async function fetchAgentProof(
   agentUrl: string,
   marketId: string,
-  connection: Connection,
+  connection: anchor.web3.Connection,
   wallet: WalletContextState,
   paymentSignature?: string | null
 ): Promise<AgentLogsResponse> {

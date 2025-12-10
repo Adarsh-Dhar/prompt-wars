@@ -1,4 +1,4 @@
-import { LAMPORTS_PER_SOL } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 import { getConnection } from "./client"
 
 export type PaymentCheck = {
@@ -74,5 +74,5 @@ export async function assertPaymentToServer(
 }
 
 export function solToLamports(amount: number) {
-  return Math.ceil(amount * LAMPORTS_PER_SOL)
+  return Math.ceil(amount * anchor.web3.LAMPORTS_PER_SOL)
 }

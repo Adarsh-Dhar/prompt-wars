@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import { useConnection, useWallet } from "@solana/wallet-adapter-react"
-import { LAMPORTS_PER_SOL } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 
 import { cn } from "@/lib/utils"
 import { fetchRegistry, registerAgent, initializeRegistry, checkProgramDeployed, RegistryAccount } from "@/lib/stake/client"
@@ -129,7 +129,7 @@ export default function NewAgentPage() {
       const reg = await fetchRegistry(connection)
       setRegistry(reg)
       if (reg) {
-        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3)} SOL bond`])
+        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / anchor.web3.LAMPORTS_PER_SOL).toFixed(3)} SOL bond`])
       } else {
         setLogs((prev) => [...prev, "> [WARN] Registry not found on-chain"])
       }
@@ -163,7 +163,7 @@ export default function NewAgentPage() {
         return
       }
       const lamports = await connection.getBalance(wallet.publicKey)
-      if (!cancelled) setWalletBalance(lamports / LAMPORTS_PER_SOL)
+      if (!cancelled) setWalletBalance(lamports / anchor.web3.LAMPORTS_PER_SOL)
     }
     loadBalance()
     const id = setInterval(loadBalance, 8000)
@@ -323,8 +323,8 @@ export default function NewAgentPage() {
       const { signature, registryPda } = await initializeRegistry({
         connection,
         wallet: anchorWallet,
-        bondLamports: 0.05 * LAMPORTS_PER_SOL, // 0.05 SOL
-        slashPenaltyLamports: 0.05 * LAMPORTS_PER_SOL, // full bond slashable
+        bondLamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL, // 0.05 SOL
+        slashPenaltyLamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL, // full bond slashable
       })
 
       setLogs((prev) => [

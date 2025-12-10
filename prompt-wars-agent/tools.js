@@ -1,4 +1,4 @@
-import { Connection, Keypair, VersionedTransaction, Transaction, SystemProgram, PublicKey } from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
 import fetch from 'cross-fetch';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
@@ -6,25 +6,25 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Setup Connection & Wallet - default to devnet so all tx use devnet
-const connection = new Connection(process.env.RPC_URL || 'https://api.devnet.solana.com');
+const connection = new anchor.web3.Connection(process.env.RPC_URL || 'https://api.devnet.solana.com');
 
 let wallet;
 if (!process.env.SOLANA_PRIVATE_KEY) {
     // Generate a test keypair for development/testing
     console.warn('⚠️  WARNING: SOLANA_PRIVATE_KEY not set. Generating a test keypair for development.');
     console.warn('⚠️  This keypair has no funds and cannot perform real transactions.');
-    wallet = Keypair.generate();
+    wallet = anchor.web3.Keypair.generate();
     console.log(`Test Wallet Generated: ${wallet.publicKey.toBase58()}`);
 } else {
     try {
         const secretKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
-        wallet = Keypair.fromSecretKey(secretKey);
+        wallet = anchor.web3.Keypair.fromSecretKey(secretKey);
         console.log(`Agent Wallet Loaded: ${wallet.publicKey.toBase58()}`);
     } catch (error) {
         if (error.message.includes('Non-base58')) {
             console.error('❌ SOLANA_PRIVATE_KEY is not a valid base58 string.');
             console.error('   Generating a test keypair instead for development.');
-            wallet = Keypair.generate();
+            wallet = anchor.web3.Keypair.generate();
             console.log(`Test Wallet Generated: ${wallet.publicKey.toBase58()}`);
         } else {
             throw error;
@@ -36,10 +36,10 @@ if (!process.env.SOLANA_PRIVATE_KEY) {
 
 // Helper function to send SOL payments
 async function sendSolPayment(recipientPubkey, amountSol) {
-    const transaction = new Transaction().add(
-        SystemProgram.transfer({
+    const transaction = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
             fromPubkey: wallet.publicKey,
-            toPubkey: new PublicKey(recipientPubkey),
+            toPubkey: new anchor.web3.PublicKey(recipientPubkey),
             lamports: amountSol * 1e9,
         })
     );
@@ -91,7 +91,7 @@ async function executeSwap({ outputMint, amountSol }) {
 
         // C. Deserialize, Sign, and Send
         const swapTransactionBuf = Buffer.from(swapResponse.swapTransaction, 'base64');
-        const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+        const transaction = anchor.web3.VersionedTransaction.deserialize(swapTransactionBuf);
         transaction.sign([wallet]);
         const rawTransaction = transaction.serialize();
 

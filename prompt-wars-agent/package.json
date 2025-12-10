@@ -12,8 +12,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
-    "@solana/web3.js": "^1.95.4",
     "bs58": "^6.0.0",
     "cors": "^2.8.5",
     "cross-fetch": "^4.0.0",

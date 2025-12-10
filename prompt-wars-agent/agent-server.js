@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
 import crypto from 'crypto';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
@@ -27,7 +27,7 @@ app.use(cors({
 app.use(express.json());
 
 // x402 Configuration - default to devnet to avoid mainnet mismatches
-const x402Connection = new Connection(process.env.RPC_URL || "https://api.devnet.solana.com");
+const x402Connection = new anchor.web3.Connection(process.env.RPC_URL || "https://api.devnet.solana.com");
 const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
 const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 const PEEK_PRICE = 0.05; // Price for unlocking logs
@@ -38,16 +38,16 @@ let agentKeypair;
 if (!process.env.SOLANA_PRIVATE_KEY) {
     // Generate a test keypair for development/testing
     console.warn('⚠️  WARNING: SOLANA_PRIVATE_KEY not set. Generating a test keypair for log signing.');
-    agentKeypair = Keypair.generate();
+    agentKeypair = anchor.web3.Keypair.generate();
     console.log(`Agent Signing Key Generated: ${agentKeypair.publicKey.toBase58()}`);
 } else {
     try {
         const secretKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
-        agentKeypair = Keypair.fromSecretKey(secretKey);
+        agentKeypair = anchor.web3.Keypair.fromSecretKey(secretKey);
         console.log(`Agent Signing Key Loaded: ${agentKeypair.publicKey.toBase58()}`);
     } catch (error) {
         console.error('❌ Failed to load SOLANA_PRIVATE_KEY for log signing. Generating test keypair.');
-        agentKeypair = Keypair.generate();
+        agentKeypair = anchor.web3.Keypair.generate();
         console.log(`Agent Signing Key Generated: ${agentKeypair.publicKey.toBase58()}`);
     }
 }

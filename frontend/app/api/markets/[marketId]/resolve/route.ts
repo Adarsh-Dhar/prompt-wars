@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { resolveSchema } from "@/lib/validations"
-import { assertPaymentToServer, solToLamports } from "@/lib/solana/transactions"
-
-const RESOLVE_FEE_SOL = 0.001
 
 export async function POST(
   request: Request,
@@ -18,13 +15,6 @@ export async function POST(
     if (!market) {
       return NextResponse.json({ error: "Market not found" }, { status: 404 })
     }
-
-    // Require a small real transaction to authorize resolution
-    await assertPaymentToServer(
-      data.txSignature,
-      solToLamports(RESOLVE_FEE_SOL),
-      data.walletAddress
-    )
 
     if (market.state === "RESOLVED") {
       return NextResponse.json({ error: "Market already resolved" }, { status: 400 })

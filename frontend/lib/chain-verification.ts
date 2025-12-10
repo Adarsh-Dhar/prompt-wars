@@ -1,7 +1,7 @@
 // Chain of Thought Verification Utilities
 // Verifies cryptographic integrity of log chains
 
-import { PublicKey } from '@solana/web3.js';
+import * as anchor from "@coral-xyz/anchor";
 
 export interface VerifiedLog {
   log_id?: number;
@@ -168,7 +168,7 @@ export async function verifyChainSignature(
     }
 
     // Create PublicKey from agent's public key
-    const publicKeyObj = new PublicKey(agentPublicKey);
+    const publicKeyObj = new anchor.web3.PublicKey(agentPublicKey);
     
     // Convert chain root hash to Uint8Array
     const message = Uint8Array.from(Buffer.from(chainRootHash, 'hex'));

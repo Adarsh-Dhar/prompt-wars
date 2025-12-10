@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { PublicKey } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 import { autoResolveFromProof } from "@/lib/auto-resolve"
 import { getPaymentToken } from "@/lib/agent-server"
 
@@ -39,8 +39,8 @@ export function AutoResolveButton({
         throw new Error("Connect wallet to auto-resolve")
       }
 
-      const marketIdPubkey = new PublicKey(marketId)
-      const agentWalletPubkey = new PublicKey(agentWallet)
+      const marketIdPubkey = new anchor.web3.PublicKey(marketId)
+      const agentWalletPubkey = new anchor.web3.PublicKey(agentWallet)
 
       // Get payment token if available (for x402)
       const paymentSignature = getPaymentToken()

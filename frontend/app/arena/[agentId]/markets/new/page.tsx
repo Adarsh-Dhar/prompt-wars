@@ -5,18 +5,13 @@ import { useRouter, useParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { useWallet, useConnection } from "@solana/wallet-adapter-react"
+import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { sendSolPayment } from "@/lib/payments"
-import { initializeMarketDefinition, PREDICTION_MARKET_PROGRAM_ID } from "@/lib/prediction-market/idl"
-import { initializeOnChainMarket, fetchMarket } from "@/lib/prediction-market/client"
-import { PublicKey } from "@solana/web3.js"
 
 export default function NewMarketPage() {
   const router = useRouter()
   const params = useParams<{ agentId: string }>()
   const agentId = Array.isArray(params?.agentId) ? params?.agentId[0] : params?.agentId
-  const agentWalletEnv = process.env.NEXT_PUBLIC_AGENT_WALLET
   const [statement, setStatement] = useState("")
   const [description, setDescription] = useState("")
   const [closesAt, setClosesAt] = useState("")
@@ -26,8 +21,7 @@ export default function NewMarketPage() {
   const [feeBps, setFeeBps] = useState("100")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { publicKey, connected, sendTransaction } = useWallet()
-  const { connection } = useConnection()
+  const { publicKey, connected } = useWallet()
   const { setVisible } = useWalletModal()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,32 +36,9 @@ export default function NewMarketPage() {
         return
       }
 
-      if (!connected || !publicKey || !sendTransaction) {
+      if (!connected || !publicKey) {
         setVisible(true)
         throw new Error("Connect wallet to create a market")
-      }
-
-      const serverWallet = process.env.NEXT_PUBLIC_SERVER_WALLET
-      if (!serverWallet) {
-        throw new Error("Server wallet not configured")
-      }
-      // Validate server wallet pubkey
-      try {
-        // eslint-disable-next-line no-new
-        new PublicKey(serverWallet)
-      } catch {
-        throw new Error("Server wallet env is not a valid public key")
-      }
-
-      // Validate agent wallet pubkey (used for PDA derivation)
-      if (!agentWalletEnv) {
-        throw new Error("Agent wallet env (NEXT_PUBLIC_AGENT_WALLET) not configured")
-      }
-      let agentPk: PublicKey
-      try {
-        agentPk = new PublicKey(agentWalletEnv)
-      } catch {
-        throw new Error("Agent wallet env is not a valid public key")
       }
 
       const liquidityAmount = Number(initialLiquidity)
@@ -75,46 +46,9 @@ export default function NewMarketPage() {
         throw new Error("Initial liquidity must be greater than zero")
       }
 
-      // Debug: log the program's expected initialize_market shape for quick comparison
-      console.info("[create-market] initialize_market requirements", {
-        programId: PREDICTION_MARKET_PROGRAM_ID,
-        args: initializeMarketDefinition?.args,
-        accounts: initializeMarketDefinition?.accounts,
-      })
-
-      // Require a real payment equal to the seed liquidity
-      const txSignature = await sendSolPayment(connection, { publicKey, sendTransaction } as any, serverWallet, liquidityAmount)
-
-      // Create wallet adapter compatible with Anchor
-      const anchorWallet = {
-        publicKey: publicKey!,
-        signTransaction: sendTransaction || (async (tx: any) => tx),
-        signAllTransactions: async (txs: any[]) => {
-          const signed = []
-          for (const tx of txs) {
-            signed.push(await sendTransaction!(tx, connection))
-          }
-          return signed
-        },
-        sendTransaction: sendTransaction!,
-      } as any
-
-      // Initialize on-chain market before hitting the API to ensure PDA exists
-      const initSig = await initializeOnChainMarket({
-        connection,
-        wallet: anchorWallet,
-        agent: agentPk,
-        statement,
-        closesAt: Math.floor(closeDate.getTime() / 1000),
-        initialLiquidityLamports: Math.round(liquidityAmount * 1_000_000_000),
-        feeBps: Number(feeBps),
-      })
-
-      // Verify the market now exists on-chain; abort if not
-      const onChainMarket = await fetchMarket(connection, initSig.marketPda)
-      if (!onChainMarket) {
-        throw new Error("On-chain market initialization failed (PDA not found).")
-      }
+      // We no longer initialize on-chain markets. Generate a dummy tx signature
+      // so the API keeps its shape without requiring a Solana program call.
+      const txSignature = crypto.randomUUID().replace(/-/g, "")
 
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
       const payload = {
@@ -128,37 +62,7 @@ export default function NewMarketPage() {
         feeBps: Number(feeBps),
         walletAddress: publicKey.toBase58(),
         txSignature,
-        marketPda: initSig.marketPda.toBase58(),
-        mints: {
-          yesMint: initSig.yesMint.toBase58(),
-          noMint: initSig.noMint.toBase58(),
-          poolAuthority: initSig.poolAuthority.toBase58(),
-          poolYesAccount: initSig.poolYesAccount.toBase58(),
-          poolNoAccount: initSig.poolNoAccount.toBase58(),
-          poolVault: initSig.poolVault.toBase58(),
-        },
       }
-
-      console.info("[create-market] outgoing payment args", {
-        connection: connection.rpcEndpoint,
-        recipient: serverWallet,
-        amountSol: liquidityAmount,
-        wallet: publicKey.toBase58(),
-        txSignature,
-      })
-
-      console.info("[create-market] on-chain init", {
-        marketPda: payload.marketPda,
-        initSignature: initSig.signature,
-        yesMint: payload.mints.yesMint,
-        noMint: payload.mints.noMint,
-        poolAuthority: payload.mints.poolAuthority,
-        poolYesAccount: payload.mints.poolYesAccount,
-        poolNoAccount: payload.mints.poolNoAccount,
-        poolVault: payload.mints.poolVault,
-      })
-
-      console.info("[create-market] POST /api/arena/:agentId/markets payload", payload)
 
       const res = await fetch(`${baseUrl}/api/arena/${agentId}/markets`, {
         method: "POST",
@@ -166,10 +70,14 @@ export default function NewMarketPage() {
         body: JSON.stringify(payload),
       })
 
+      console.log("[create-market] POST /api/arena/:agentId/markets response", res)
+
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.error || "Failed to create market")
       }
+
+      console.log("[create-market] POST /api/arena/:agentId/markets data", data)
 
       router.push(`/arena/${agentId}/markets/${data.market.id}`)
     } catch (err: any) {

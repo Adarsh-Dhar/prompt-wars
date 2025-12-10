@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { getConnection } from "@/lib/solana/client"
 import { autoResolveFromProof } from "@/lib/auto-resolve"
-import { PublicKey } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 import { Wallet } from "@coral-xyz/anchor"
 
 /**
@@ -61,9 +61,9 @@ export async function POST(
     // Create wallet from provided address and signature
     // Note: In a real implementation, you'd verify the signature properly
     // For now, we'll use a minimal wallet adapter
-    const walletPubkey = new PublicKey(walletAddress)
-    const agentWalletPubkey = new PublicKey(agentWallet)
-    const marketIdPubkey = new PublicKey(marketId)
+    const walletPubkey = new anchor.web3.PublicKey(walletAddress)
+    const agentWalletPubkey = new anchor.web3.PublicKey(agentWallet)
+    const marketIdPubkey = new anchor.web3.PublicKey(marketId)
 
     // Create a minimal wallet for contract interactions
     // Note: This requires the actual wallet to sign transactions

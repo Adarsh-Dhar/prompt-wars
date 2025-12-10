@@ -6,7 +6,7 @@ import { Wallet, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { LAMPORTS_PER_SOL } from "@solana/web3.js"
+import * as anchor from "@coral-xyz/anchor";
 
 export function NavBar() {
   const { publicKey, disconnect, connected } = useWallet()
@@ -18,12 +18,12 @@ export function NavBar() {
     if (connected && publicKey) {
       // Fetch balance
       connection.getBalance(publicKey).then((bal) => {
-        setBalance(bal / LAMPORTS_PER_SOL)
+        setBalance(bal / anchor.web3.LAMPORTS_PER_SOL)
       })
 
       // Subscribe to balance changes
       const subscriptionId = connection.onAccountChange(publicKey, (accountInfo) => {
-        setBalance(accountInfo.lamports / LAMPORTS_PER_SOL)
+        setBalance(accountInfo.lamports / anchor.web3.LAMPORTS_PER_SOL)
       })
 
       return () => {
