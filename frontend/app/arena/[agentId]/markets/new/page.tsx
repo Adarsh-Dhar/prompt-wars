@@ -1,12 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { NATIVE_MINT } from "@solana/spl-token"
+import { getConnection } from "@/lib/solana/client"
+import { initializeMarket, canCreateMarket, generateMarketId } from "@/lib/prediction/client"
 
 export default function NewMarketPage() {
   const router = useRouter()
@@ -21,14 +24,36 @@ export default function NewMarketPage() {
   const [feeBps, setFeeBps] = useState("100")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { publicKey, connected } = useWallet()
+  const [hasExistingMarket, setHasExistingMarket] = useState<boolean | null>(null)
+  const { publicKey, connected, signTransaction, signAllTransactions } = useWallet()
   const { setVisible } = useWalletModal()
+
+  // Since we now support multiple markets per wallet, we don't need to check for existing markets
+  // Remove the existing market check
+  useEffect(() => {
+    // Always allow market creation now that we support multiple markets per wallet
+    setHasExistingMarket(false)
+  }, [connected, publicKey])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
     try {
+      // Validate statement length
+      if (statement.trim().length < 4) {
+        setError("Statement must be at least 4 characters long")
+        setSubmitting(false)
+        return
+      }
+
+      // Validate description length
+      if (description.trim().length < 4) {
+        setError("Description must be at least 4 characters long")
+        setSubmitting(false)
+        return
+      }
+
       const closeDate = new Date(closesAt)
       if (isNaN(closeDate.getTime()) || closeDate.getTime() <= Date.now()) {
         setError("Close date must be in the future")
@@ -46,9 +71,39 @@ export default function NewMarketPage() {
         throw new Error("Initial liquidity must be greater than zero")
       }
 
-      // We no longer initialize on-chain markets. Generate a dummy tx signature
-      // so the API keeps its shape without requiring a Solana program call.
-      const txSignature = crypto.randomUUID().replace(/-/g, "")
+      // Initialize the market on-chain
+      const connection = getConnection()
+      const endTimeUnix = Math.floor(closeDate.getTime() / 1000)
+      
+      console.log("[create-market] Generating unique market ID...")
+      
+      // Generate a unique market ID for this market
+      const marketId = generateMarketId()
+      console.log("[create-market] Generated market ID:", marketId)
+      
+      // Check if this specific market ID is available (should always be true with our generation method)
+      const canCreate = await canCreateMarket(connection, publicKey, marketId)
+      if (!canCreate) {
+        throw new Error(`Market ID ${marketId} already exists. Please try again.`)
+      }
+      
+      console.log("[create-market] Initializing market on-chain...")
+      
+      // Create wallet adapter compatible object
+      const walletAdapter = {
+        publicKey: publicKey!,
+        signTransaction: signTransaction!,
+        signAllTransactions: signAllTransactions!
+      }
+      
+      const marketResult = await initializeMarket(connection, walletAdapter, {
+        question: statement,
+        endTime: endTimeUnix,
+        collateralMint: NATIVE_MINT, // Using native SOL as collateral
+        marketId: marketId,
+      })
+
+      console.log("[create-market] Market initialized:", marketResult)
 
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
       const payload = {
@@ -61,7 +116,13 @@ export default function NewMarketPage() {
         initialLiquidity: liquidityAmount,
         feeBps: Number(feeBps),
         walletAddress: publicKey.toBase58(),
-        txSignature,
+        txSignature: marketResult.txSignature,
+        marketPda: marketResult.marketPda.toBase58(),
+        mints: {
+          yesMint: marketResult.yesMint.toBase58(),
+          noMint: marketResult.noMint.toBase58(),
+          poolVault: marketResult.collateralVault.toBase58(),
+        }
       }
 
       const res = await fetch(`${baseUrl}/api/arena/${agentId}/markets`, {
@@ -103,6 +164,11 @@ export default function NewMarketPage() {
             Set the statement, constraints, and seed liquidity. This spins up a CPMM with YES/NO
             outcome shares so traders can move the price.
           </p>
+          <div className="mt-3 rounded border border-green-500/50 bg-green-500/10 px-3 py-2">
+            <p className="font-mono text-xs text-green-500">
+              ✅ You can now create multiple markets with the same wallet. Each market gets a unique ID.
+            </p>
+          </div>
         </div>
 
         <form
@@ -111,29 +177,35 @@ export default function NewMarketPage() {
         >
           <div className="space-y-2">
             <label className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Statement *
+              Statement * <span className="text-xs text-muted-foreground">({statement.length}/4 min)</span>
             </label>
             <Input
               required
               value={statement}
               onChange={(e) => setStatement(e.target.value)}
               placeholder="Will the agent ship feature X this week?"
-              className="font-mono"
+              className={`font-mono ${statement.length > 0 && statement.length < 4 ? 'border-red-500' : ''}`}
             />
+            {statement.length > 0 && statement.length < 4 && (
+              <p className="text-xs text-red-500 font-mono">Statement must be at least 4 characters</p>
+            )}
           </div>
 
           <div className="space-y-2">
             <label className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Description *
+              Description * <span className="text-xs text-muted-foreground">({description.length}/4 min)</span>
             </label>
             <Textarea
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add relevant context, assumptions, or success criteria."
-              className="font-mono"
+              className={`font-mono ${description.length > 0 && description.length < 4 ? 'border-red-500' : ''}`}
               rows={4}
             />
+            {description.length > 0 && description.length < 4 && (
+              <p className="text-xs text-red-500 font-mono">Description must be at least 4 characters</p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -235,8 +307,8 @@ export default function NewMarketPage() {
             </Button>
             <Button
               type="submit"
-              disabled={submitting}
-              className="neon-glow-cyan border border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 font-mono text-xs uppercase tracking-[0.18em] text-[var(--neon-cyan)]"
+              disabled={submitting || statement.trim().length < 4 || description.trim().length < 4 || !closesAt}
+              className="neon-glow-cyan border border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10 font-mono text-xs uppercase tracking-[0.18em] text-[var(--neon-cyan)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? "Creating..." : "Create Market"}
             </Button>

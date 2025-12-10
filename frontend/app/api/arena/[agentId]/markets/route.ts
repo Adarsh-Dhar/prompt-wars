@@ -121,8 +121,6 @@ export async function POST(
           poolAuthority: mintAddresses.poolAuthority,
           poolYesAccount: mintAddresses.poolYesAccount,
           poolNoAccount: mintAddresses.poolNoAccount,
-          poolVault,
-          marketPda,
           reserveYes: cpmm.reserveYes,
           reserveNo: cpmm.reserveNo,
         },

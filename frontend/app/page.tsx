@@ -44,7 +44,7 @@ export default async function HomePage() {
     const mission = market.mission
     const agent = mission?.agent
     return {
-      id: agent?.id || market.id,
+      id: market.id, // Use market.id to ensure uniqueness
       name: agent?.name || "UNKNOWN",
       mission: mission?.description || "No mission",
       status: mission?.status === "ACTIVE" ? "LIVE NOW" : mission?.status || "OFFLINE",
