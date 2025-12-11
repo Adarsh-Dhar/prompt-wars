@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 4004",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 4004",
     "agent": "node run-agent.js",
     "server": "node agent-server.js",
     "dev:server": "nodemon agent-server.js",
