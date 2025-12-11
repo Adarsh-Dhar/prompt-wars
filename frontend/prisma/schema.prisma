@@ -129,6 +129,9 @@ model Market {
   poolAuthority  String?
   poolYesAccount String?
   poolNoAccount  String?
+  marketPda      String?       // Solana market PDA address
+  authority      String?       // Wallet address that created the market
+  blockchainMarketId String?   // Market ID used for PDA generation
   reserveYes     Decimal       @default(0) @db.Decimal(18, 6)
   reserveNo      Decimal       @default(0) @db.Decimal(18, 6)
   state          MarketState   @default(ACTIVE)

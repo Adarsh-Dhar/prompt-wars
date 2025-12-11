@@ -78,7 +78,22 @@ export async function GET(
     const rugOdds = priceNo * 100
     console.log(`${logPrefix} Prices - YES: ${priceYes}, NO: ${priceNo}`)
 
-    const marketPda = (market as any).marketPda ?? null
+    // Get marketPda from database or generate it if we have the necessary data
+    let marketPda = (market as any).marketPda || null
+    
+    // If we don't have it stored but have authority and blockchainMarketId, generate it
+    if (!marketPda && (market as any).authority && (market as any).blockchainMarketId) {
+      try {
+        const { getMarketPda } = await import("@/lib/prediction/client")
+        const authority = new (await import("@coral-xyz/anchor")).web3.PublicKey((market as any).authority)
+        const blockchainMarketId = parseInt((market as any).blockchainMarketId)
+        const generatedPda = getMarketPda(authority, blockchainMarketId)
+        marketPda = generatedPda.toBase58()
+      } catch (error) {
+        console.error(`${logPrefix} Error generating marketPda:`, error)
+        marketPda = null
+      }
+    }
 
     const response = {
       market: {

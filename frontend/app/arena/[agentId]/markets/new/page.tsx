@@ -118,6 +118,7 @@ export default function NewMarketPage() {
         walletAddress: publicKey.toBase58(),
         txSignature: marketResult.txSignature,
         marketPda: marketResult.marketPda.toBase58(),
+        blockchainMarketId: marketId,
         mints: {
           yesMint: marketResult.yesMint.toBase58(),
           noMint: marketResult.noMint.toBase58(),

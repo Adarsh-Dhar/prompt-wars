@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { tradeSchema } from "@/lib/validations"
 import { getPrices, getTradeQuote } from "@/lib/solana/amm"
+import { getMarketPda } from "@/lib/prediction/client"
+import { Outcome } from "@/lib/prediction/prediction-idl"
+import * as anchor from "@coral-xyz/anchor"
+import { ZodError } from "zod"
 
 export async function POST(
   request: Request,
@@ -10,7 +14,9 @@ export async function POST(
   try {
     const { marketId } = await params
     const body = await request.json()
+    console.log("Trade request body:", body)
     const data = tradeSchema.parse(body)
+    console.log("Parsed trade data:", data)
 
     const market = await db.market.findUnique({
       where: { id: marketId },
@@ -128,8 +134,12 @@ export async function POST(
     })
   } catch (error) {
     console.error("Error executing trade:", error)
-    if (error instanceof Error && error.name === "ZodError") {
-      return NextResponse.json({ error: "Invalid request data" }, { status: 400 })
+    if (error instanceof ZodError) {
+      console.error("Zod validation error:", error.errors)
+      return NextResponse.json({ 
+        error: "Invalid request data", 
+        details: error.errors 
+      }, { status: 400 })
     }
     return NextResponse.json({ error: "Failed to process trade" }, { status: 500 })
   }

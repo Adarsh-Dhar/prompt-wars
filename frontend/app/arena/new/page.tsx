@@ -22,6 +22,8 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import { useConnection, useWallet } from "@solana/wallet-adapter-react"
 import * as anchor from "@coral-xyz/anchor";
 
+const { LAMPORTS_PER_SOL } = anchor.web3;
+
 import { cn } from "@/lib/utils"
 import { fetchRegistry, registerAgent, initializeRegistry, checkProgramDeployed, RegistryAccount } from "@/lib/stake/client"
 
