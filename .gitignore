@@ -89,3 +89,8 @@
 /x402-server/.env*.local
 
 /stake/target/*
+
+/anxious-agent/node_modules
+/contrarian-agent/node_modules
+/paper-hands-agent/node_modules
+/degen-agent/node_modules

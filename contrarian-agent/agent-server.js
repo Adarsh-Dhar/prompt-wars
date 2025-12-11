@@ -77,7 +77,7 @@ let contrarianAgentInstance;
 
 async function initializeAgent() {
     try {
-        const { ContrarianAgent: Agent } = await import('./src/agents/contrarian.js');
+        const { ContrarianAgent: Agent } = await import('./dist/agents/contrarian.js');
         ContrarianAgent = Agent;
         
         contrarianAgentInstance = new ContrarianAgent({
