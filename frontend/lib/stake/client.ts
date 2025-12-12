@@ -258,6 +258,60 @@ export async function registerAgent(params: {
   tags: string[]
 }) {
   const { connection, wallet, name, url, tags } = params
+  
+  // Debug logging to identify undefined parameters
+  console.log("registerAgent called with params:", {
+    name: name,
+    url: url,
+    tags: tags,
+    nameType: typeof name,
+    urlType: typeof url,
+    tagsType: typeof tags,
+    tagsLength: tags?.length,
+    walletPublicKey: wallet.publicKey?.toBase58()
+  })
+  
+  // Validate parameters with detailed logging
+  console.log("Parameter validation:")
+  console.log("  name:", JSON.stringify(name), "type:", typeof name, "length:", name?.length)
+  console.log("  url:", JSON.stringify(url), "type:", typeof url, "length:", url?.length)
+  console.log("  tags:", JSON.stringify(tags), "type:", typeof tags, "isArray:", Array.isArray(tags), "length:", tags?.length)
+  
+  if (!name || typeof name !== 'string') {
+    throw new Error(`Invalid name parameter: ${JSON.stringify(name)} (type: ${typeof name})`)
+  }
+  
+  if (name.length === 0) {
+    throw new Error(`Name parameter is empty string`)
+  }
+  
+  if (!url || typeof url !== 'string') {
+    throw new Error(`Invalid url parameter: ${JSON.stringify(url)} (type: ${typeof url})`)
+  }
+  
+  if (url.length === 0) {
+    throw new Error(`URL parameter is empty string`)
+  }
+  
+  if (!tags || !Array.isArray(tags)) {
+    throw new Error(`Invalid tags parameter: ${JSON.stringify(tags)} (type: ${typeof tags})`)
+  }
+  
+  if (tags.length === 0) {
+    throw new Error(`Tags array is empty`)
+  }
+  
+  // Validate each tag
+  for (let i = 0; i < tags.length; i++) {
+    const tag = tags[i]
+    if (!tag || typeof tag !== 'string') {
+      throw new Error(`Invalid tag at index ${i}: ${JSON.stringify(tag)} (type: ${typeof tag})`)
+    }
+    if (tag.length === 0) {
+      throw new Error(`Tag at index ${i} is empty string`)
+    }
+  }
+  
   const program = getProgram(connection, wallet)
 
   if (!("publicKey" in wallet) || !wallet.publicKey) {
@@ -268,17 +322,86 @@ export async function registerAgent(params: {
   const agent = getAgentPda(wallet.publicKey)
   const vault = getVaultPda(agent)
 
-  const sig = await program.methods
-    .registerAgent(name, url, tags)
-    .accounts({
-      registry,
-      agent,
-      agentWallet: wallet.publicKey,
-      vault,
-      payer: wallet.publicKey,
-      systemProgram: anchor.web3.SystemProgram.programId,
+  console.log("Calling program.methods.registerAgent with:", { name, url, tags })
+  console.log("Program methods available:", Object.keys(program.methods))
+  
+  // Build the accounts object
+  const accounts = {
+    registry,
+    agent,
+    agentWallet: wallet.publicKey,
+    vault,
+    payer: wallet.publicKey,
+    systemProgram: anchor.web3.SystemProgram.programId,
+  }
+  
+  console.log("Accounts:", {
+    registry: registry.toBase58(),
+    agent: agent.toBase58(),
+    agentWallet: wallet.publicKey.toBase58(),
+    vault: vault.toBase58(),
+    payer: wallet.publicKey.toBase58(),
+    systemProgram: anchor.web3.SystemProgram.programId.toBase58(),
+  })
+
+  // Anchor converts snake_case Rust functions to camelCase in JavaScript
+  console.log("Accessing program.methods.registerAgent...")
+  let methodBuilder
+  try {
+    methodBuilder = program.methods.registerAgent
+    console.log("Method builder accessed successfully:", typeof methodBuilder)
+  } catch (methodError: any) {
+    console.error("Error accessing method:", methodError)
+    throw new Error(`Failed to access registerAgent method: ${methodError?.message || methodError}`)
+  }
+
+  // Try to call the method with parameters
+  console.log("Calling method with parameters...")
+  let methodWithParams
+  try {
+    methodWithParams = methodBuilder(name, url, tags)
+    console.log("Method called with parameters successfully")
+  } catch (paramError: any) {
+    console.error("Error calling method with parameters:", paramError)
+    console.error("Parameter error details:", {
+      message: paramError?.message,
+      code: paramError?.code,
+      stack: paramError?.stack?.split('\n').slice(0, 5).join('\n')
     })
-    .rpc()
+    throw new Error(`Failed to call method with parameters: ${paramError?.message || paramError}`)
+  }
+
+  // Try to add accounts
+  console.log("Adding accounts...")
+  let methodWithAccounts
+  try {
+    methodWithAccounts = methodWithParams.accounts(accounts)
+    console.log("Accounts added successfully")
+  } catch (accountError: any) {
+    console.error("Error adding accounts:", accountError)
+    throw new Error(`Failed to add accounts: ${accountError?.message || accountError}`)
+  }
+
+  // Try to build the instruction
+  console.log("Building instruction...")
+  let instruction
+  try {
+    instruction = await methodWithAccounts.instruction()
+    console.log("Instruction built successfully")
+  } catch (instructionError: any) {
+    console.error("Error building instruction:", instructionError)
+    console.error("Instruction error details:", {
+      message: instructionError?.message,
+      code: instructionError?.code,
+      logs: instructionError?.logs,
+      stack: instructionError?.stack?.split('\n').slice(0, 5).join('\n')
+    })
+    throw new Error(`Failed to build instruction: ${instructionError?.message || instructionError}`)
+  }
+
+  // Now execute the transaction
+  console.log("Executing transaction...")
+  const sig = await methodWithAccounts.rpc()
 
   return { signature: sig, agentPda: agent }
 }

@@ -2,137 +2,200 @@ import { Idl } from "@coral-xyz/anchor"
 
 export const AGENT_REGISTRY_PROGRAM_ID = "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
 
-// Complete IDL with types field for proper account deserialization
+// Generated IDL from anchor build - matches the deployed program exactly
 export const agentRegistryIdl = {
-  "version": "0.1.0",
-  "name": "agent_registry",
-  "programId": AGENT_REGISTRY_PROGRAM_ID,
+  "address": AGENT_REGISTRY_PROGRAM_ID,
+  "metadata": {
+    "name": "agent_registry",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Agent registry with staking, proof requests, and slashing."
+  },
   "instructions": [
     {
-      "name": "initializeRegistry",
+      "name": "initialize_registry",
+      "discriminator": [189, 181, 20, 17, 174, 57, 249, 59],
       "accounts": [
-        { "name": "registry", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false }
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [114, 101, 103, 105, 115, 116, 114, 121]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "bondLamports", "type": "u64" },
-        { "name": "slashPenaltyLamports", "type": "u64" }
+        {
+          "name": "bond_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "slash_penalty_lamports",
+          "type": "u64"
+        }
       ]
     },
     {
-      "name": "registerAgent",
+      "name": "register_agent",
+      "discriminator": [135, 157, 66, 195, 2, 113, 175, 30],
       "accounts": [
-        { "name": "registry", "isMut": true, "isSigner": false },
-        { "name": "agent", "isMut": true, "isSigner": false },
-        { "name": "agentWallet", "isMut": false, "isSigner": false },
-        { "name": "vault", "isMut": true, "isSigner": false },
-        { "name": "payer", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false }
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [114, 101, 103, 105, 115, 116, 114, 121]
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [97, 103, 101, 110, 116]
+              },
+              {
+                "kind": "account",
+                "path": "agent_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent_wallet"
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": [
-        { "name": "name", "type": "string" },
-        { "name": "url", "type": "string" },
-        { "name": "tags", "type": { "vec": "string" } }
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": {
+            "vec": "string"
+          }
+        }
       ]
     }
   ],
   "accounts": [
     {
-      "name": "registry",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "authority", "type": "pubkey" },
-          { "name": "bondLamports", "type": "u64" },
-          { "name": "slashPenaltyLamports", "type": "u64" },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
+      "name": "Agent",
+      "discriminator": [47, 166, 112, 147, 155, 197, 86, 7]
     },
     {
-      "name": "agent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "authority", "type": "pubkey" },
-          { "name": "agentWallet", "type": "pubkey" },
-          { "name": "name", "type": "string" },
-          { "name": "url", "type": "string" },
-          { "name": "tags", "type": { "vec": "string" } },
-          { "name": "bondLamports", "type": "u64" },
-          { "name": "requestCount", "type": "u64" },
-          { "name": "pendingRequest", "type": { "option": "pubkey" } },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
-    },
-    {
-      "name": "proofRequest",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "agent", "type": "pubkey" },
-          { "name": "requester", "type": "pubkey" },
-          { "name": "marketId", "type": { "array": ["u8", 32] } },
-          { "name": "requestedAt", "type": "i64" },
-          { "name": "deadlineTs", "type": "i64" },
-          { "name": "proofUri", "type": "string" },
-          { "name": "logRoot", "type": { "array": ["u8", 32] } },
-          { "name": "signature", "type": { "array": ["u8", 64] } },
-          { "name": "fulfilled", "type": "bool" },
-          { "name": "slashable", "type": "bool" },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
+      "name": "Registry",
+      "discriminator": [47, 174, 110, 246, 184, 182, 252, 218]
     }
   ],
   "types": [
-    {
-      "name": "Registry",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "authority", "type": "pubkey" },
-          { "name": "bondLamports", "type": "u64" },
-          { "name": "slashPenaltyLamports", "type": "u64" },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
-    },
     {
       "name": "Agent",
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "authority", "type": "pubkey" },
-          { "name": "agentWallet", "type": "pubkey" },
-          { "name": "name", "type": "string" },
-          { "name": "url", "type": "string" },
-          { "name": "tags", "type": { "vec": "string" } },
-          { "name": "bondLamports", "type": "u64" },
-          { "name": "requestCount", "type": "u64" },
-          { "name": "pendingRequest", "type": { "option": "pubkey" } },
-          { "name": "bump", "type": "u8" }
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "tags",
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "bond_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "request_count",
+            "type": "u64"
+          },
+          {
+            "name": "pending_request",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
         ]
       }
     },
     {
-      "name": "ProofRequest",
+      "name": "Registry",
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "agent", "type": "pubkey" },
-          { "name": "requester", "type": "pubkey" },
-          { "name": "marketId", "type": { "array": ["u8", 32] } },
-          { "name": "requestedAt", "type": "i64" },
-          { "name": "deadlineTs", "type": "i64" },
-          { "name": "proofUri", "type": "string" },
-          { "name": "logRoot", "type": { "array": ["u8", 32] } },
-          { "name": "signature", "type": { "array": ["u8", 64] } },
-          { "name": "fulfilled", "type": "bool" },
-          { "name": "slashable", "type": "bool" },
-          { "name": "bump", "type": "u8" }
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "bond_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "slash_penalty_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
         ]
       }
     }

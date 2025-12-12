@@ -21,7 +21,11 @@ export async function POST(request: Request) {
 
     if (existingAgent) {
       return NextResponse.json(
-        { error: "Agent with this name already exists" },
+        { 
+          error: "Agent with this name already exists in database",
+          existingAgentId: existingAgent.id,
+          message: "You can still proceed with blockchain staking using a different name or the same name on-chain"
+        },
         { status: 400 }
       )
     }

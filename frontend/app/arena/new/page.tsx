@@ -133,14 +133,14 @@ export default function NewAgentPage() {
         if (index === diagnosticsScript.length - 1) {
           setRunningDiagnostics(false)
           setDiagnosticsComplete(true)
-          // Auto-register agent after successful diagnostics
-          registerAgent()
+          // Auto-register agent in database after successful diagnostics
+          registerAgentInDatabase()
         }
       }, accumulated)
     })
   }
 
-  const registerAgent = async () => {
+  const registerAgentInDatabase = async () => {
     try {
       setLogs((prev) => [...prev, "> REGISTERING AGENT IN DATABASE..."])
       
@@ -160,6 +160,20 @@ export default function NewAgentPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        // If agent already exists, allow user to proceed with staking
+        if (data.error?.includes('already exists')) {
+          setLogs((prev) => [
+            ...prev,
+            "> [WARN] AGENT NAME ALREADY EXISTS IN DATABASE",
+            "> This is OK - you can still stake on blockchain with this name",
+            "> Database registration is separate from blockchain staking",
+            "> READY FOR STAKING..."
+          ])
+          setAgentRegistered(true)
+          // Use a placeholder ID for existing agents
+          setRegisteredAgentId('existing-agent')
+          return
+        }
         throw new Error(data.error || 'Failed to register agent')
       }
 
@@ -173,12 +187,30 @@ export default function NewAgentPage() {
       ])
     } catch (error: any) {
       console.error("Agent registration error:", error)
+      
+      // For network errors or server issues, still allow staking
+      if (error.message?.includes('fetch') || error.message?.includes('network')) {
+        setLogs((prev) => [
+          ...prev,
+          `> [WARN] DATABASE REGISTRATION FAILED: ${error.message}`,
+          "> This is OK - you can still stake on blockchain",
+          "> Database registration is optional for staking",
+          "> READY FOR STAKING..."
+        ])
+        setAgentRegistered(true)
+        setRegisteredAgentId('no-db-registration')
+        return
+      }
+      
       setLogs((prev) => [
         ...prev,
         `> [ERROR] AGENT REGISTRATION FAILED: ${error.message}`,
-        "> Please fix the issue and run diagnostics again"
+        "> You can still proceed with blockchain staking",
+        "> Try changing the agent name for database registration"
       ])
-      setDiagnosticsComplete(false)
+      // Still allow staking even if database registration fails
+      setAgentRegistered(true)
+      setRegisteredAgentId('registration-failed')
     }
   }
 
@@ -319,13 +351,62 @@ export default function NewAgentPage() {
         sendTransaction: wallet.sendTransaction!,
       } as any
 
+      setLogs((prev) => [...prev, "> CALLING BLOCKCHAIN REGISTER AGENT..."])
+      
+      // Debug the parameters being passed
+      console.log("Staking parameters:", {
+        codename,
+        endpoint,
+        strategy,
+        tags: [strategy || "DEGEN_SNIPER"]
+      })
+      
+      setLogs((prev) => [...prev, `> NAME: ${codename}`, `> URL: ${endpoint}`, `> STRATEGY: ${strategy}`])
+      
+      // Ensure all parameters are properly defined and within constraints
+      // MAX_NAME = 32, MAX_URL = 128, MAX_TAG_LEN = 24
+      const agentName = (codename || "DEFAULT_AGENT").substring(0, 32)
+      const agentUrl = (endpoint || "http://localhost:4001").substring(0, 128)
+      const agentStrategy = (strategy || "DEGEN_SNIPER").substring(0, 24)
+      const agentTags = [agentStrategy]
+      
+      setLogs((prev) => [...prev, `> VALIDATED PARAMS:`])
+      setLogs((prev) => [...prev, `>   NAME: "${agentName}" (${agentName.length} chars)`])
+      setLogs((prev) => [...prev, `>   URL: "${agentUrl}" (${agentUrl.length} chars)`])
+      setLogs((prev) => [...prev, `>   TAGS: ${JSON.stringify(agentTags)} (${agentTags.length} tags)`])
+      
+      // Additional validation
+      if (!agentName || agentName.length === 0) {
+        throw new Error("Agent name cannot be empty")
+      }
+      if (!agentUrl || agentUrl.length === 0) {
+        throw new Error("Agent URL cannot be empty")
+      }
+      if (!agentTags || agentTags.length === 0) {
+        throw new Error("Agent tags cannot be empty")
+      }
+      
       const result = await registerAgent({
         connection,
         wallet: anchorWallet,
-        name: codename,
-        url: endpoint,
-        tags: [strategy || "DEGEN_SNIPER"],
+        name: agentName,
+        url: agentUrl,
+        tags: agentTags,
       })
+      
+      // Validate result structure
+      if (!result) {
+        throw new Error("registerAgent returned null/undefined result")
+      }
+      
+      if (!result.signature) {
+        throw new Error("registerAgent result missing signature field")
+      }
+      
+      if (!result.agentPda) {
+        throw new Error("registerAgent result missing agentPda field")
+      }
+
       const { signature, agentPda } = result
       setTxSig(signature)
       setLogs((prev) => [
@@ -340,10 +421,25 @@ export default function NewAgentPage() {
     } catch (error: any) {
       console.error("Stake error:", error)
       const message = error?.message || error?.toString() || "Stake failed"
-      setLogs((prev) => [...prev, `> [ERROR] ${message}`])
-      // Show more detailed error if available
+      setLogs((prev) => [...prev, `> [ERROR] BLOCKCHAIN STAKING FAILED: ${message}`])
+      
+      // Show more detailed error information
       if (error?.logs) {
         setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
+      }
+      
+      // Show transaction message if available
+      if (error?.transactionMessage) {
+        setLogs((prev) => [...prev, `> [TX ERROR] ${error.transactionMessage}`])
+      }
+      
+      // Show program-specific errors
+      if (error?.code === 4100 || error?.error?.errorCode?.code === "DeclaredProgramIdMismatch") {
+        setLogs((prev) => [
+          ...prev,
+          "> [ERROR] PROGRAM ID MISMATCH - Program needs to be redeployed",
+          "> Check that declare_id!() in lib.rs matches deployed program address"
+        ])
       }
     } finally {
       setIsStaking(false)
