@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as anchor from '@coral-xyz/anchor';
-import crypto from 'crypto';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { simulateTrade } from './sim/trading-simulator.js';
@@ -16,7 +15,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 // --- CONFIGURATION ---
 const app = express();
-const PORT = process.env.PORT || 4001; // Different port from prompt-wars-agent
+const PORT = process.env.PORT || 4001;
 
 // CORS configuration to allow frontend
 app.use(cors({
@@ -29,7 +28,6 @@ app.use(express.json());
 // Solana configuration - default to devnet to avoid mainnet mismatches
 const connection = new anchor.web3.Connection(process.env.RPC_URL || "https://api.devnet.solana.com");
 const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
-const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 const PEEK_PRICE = 0.05; // Price for unlocking analysis
 const GOD_MODE_PRICE = 1.0; // Price for God Mode injection
 
@@ -187,7 +185,7 @@ async function generateTradingAnalysis(tokenSymbol, currentPrice = null) {
         });
 
         const prompt = `
-        Analyze the token ${tokenSymbol} ${currentPrice ? `at current price $${currentPrice}` : ''}.
+        Analyze the token ${tokenSymbol} ${currentPrice ? `at current price ${currentPrice}` : ''}.
         
         Provide:
         1. Public summary (2-3 sentences, teaser for non-premium users)
@@ -260,10 +258,10 @@ async function generateTradingAnalysis(tokenSymbol, currentPrice = null) {
             // Optionally update capital (disabled by default for safety)
             if (process.env.SIM_AUTO_APPLY_PNL === 'true') {
                 agentState.portfolio.capitalUsd += simulation.finalPnlUsd;
-                addLog(`💰 Portfolio updated: $${agentState.portfolio.capitalUsd.toFixed(2)}`, "premium");
+                addLog(`💰 Portfolio updated: ${agentState.portfolio.capitalUsd.toFixed(2)}`, "premium");
             }
             
-            addLog(`📈 Simulation complete: ${simulation.finalPnlUsd >= 0 ? '+' : ''}$${simulation.finalPnlUsd.toFixed(2)} (${(simulation.finalRoi * 100).toFixed(1)}% ROI)`, "public");
+            addLog(`📈 Simulation complete: ${simulation.finalPnlUsd >= 0 ? '+' : ''}${simulation.finalPnlUsd.toFixed(2)} (${(simulation.finalRoi * 100).toFixed(1)}% ROI)`, "public");
             
         } catch (simulationError) {
             console.error('Simulation error:', simulationError);
@@ -534,15 +532,26 @@ app.get('/api/current-analysis', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'healthy', 
-        agent: 'degen-agent',
-        timestamp: new Date().toISOString()
-    });
+    try {
+        res.json({ 
+            status: 'healthy', 
+            agent: 'degen-agent',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Health check error:', error);
+        res.status(500).json({ error: 'Health check failed', details: error.message });
+    }
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Express error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
 });
 
 // Start the server
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
     console.log(`🚀 Degen Agent running on http://localhost:${PORT}`);
     console.log(`🔑 Agent Wallet: ${agentKeypair.publicKey.toBase58()}`);
     console.log(`💰 Payment Address: ${SERVER_WALLET}`);
@@ -553,14 +562,7 @@ app.listen(PORT, async () => {
     addLog("🤖 RektOrRich Agent Online. Ready to analyze and predict!", "public");
     addLog("💎 Diamond hands activated. LFG!", "public");
     
-    // Initialize frontend integration
-    try {
-        const { initializeAgentIntegration } = await import('./startup.js');
-        await initializeAgentIntegration();
-    } catch (error) {
-        console.warn('⚠️  Frontend integration not available:', error.message);
-        console.log('🔄 Agent running in standalone mode');
-    }
+    console.log('🔄 Agent running in standalone mode (no frontend integration)');
 });
 
 // Make functions available globally for integration

@@ -11,6 +11,7 @@ AI-powered crypto prediction market agent with payment-gated insights. This agen
 - 💎 Degen personality with crypto slang
 - 🔄 Real-time WebSocket updates
 - 🔐 Solana blockchain payment verification
+- 📈 **Trading Simulator** - Realistic position simulation with PnL tracking (**SIMULATION - NO REAL TXS**)
 
 ## Architecture
 
@@ -162,6 +163,213 @@ The agent registers with the frontend using these details:
     "signature": "transaction_signature"
   }
   ```
+
+## Trading Simulator
+
+⚠️ **SIMULATION - NO REAL TXS** ⚠️
+
+The degen-agent includes a comprehensive trading simulator that models how a degen trader's capital would evolve based on AI-generated LONG/SHORT decisions. The simulator provides realistic trading conditions without executing actual on-chain transactions.
+
+### Features
+
+- **Realistic Price Data**: Fetches real market data from CoinGecko API with synthetic fallback
+- **Price Impact Modeling**: Calculates slippage based on position size and market liquidity
+- **Multi-Horizon Analysis**: Tracks PnL across multiple time periods (1min, 5min, 1hr, 1day)
+- **Portfolio Management**: Maintains simulated capital and trade history
+- **Configurable Parameters**: Adjustable via environment variables
+- **Deterministic Testing**: Reproducible results for testing and validation
+
+### Configuration
+
+Add these environment variables to your `.env` file:
+
+```env
+# Trading Simulator Configuration
+# SIMULATION - NO REAL TXS
+
+# Starting capital for simulated portfolio (USD)
+SIM_CAPITAL_USD=100
+
+# Position sizing as percentage of capital (0.1 = 10%, 1.0 = 100%)
+SIM_SIZING_PERCENT=0.5
+
+# Price impact coefficient (higher = more impact from large positions)
+SIM_IMPACT_COEFF=0.0005
+
+# Trading fee rate (0.001 = 0.1% per side, 0.2% roundtrip)
+SIM_FEE_RATE=0.001
+
+# Default market liquidity in USD (affects price impact)
+SIM_DEFAULT_LIQUIDITY=20000
+
+# Auto-apply PnL to portfolio capital (true/false)
+# WARNING: Keep false for safety - this is just simulation
+SIM_AUTO_APPLY_PNL=false
+```
+
+### Mathematical Formulas
+
+The simulator implements realistic trading mathematics:
+
+#### Position Sizing
+```
+positionUsd = capitalUsd × sizingPercent
+```
+
+#### Price Impact Model
+```
+priceImpact = impactCoeff × (positionUsd / marketLiquidityUsd)
+entryFillPrice = seedPrice × (1 + sign × priceImpact)
+where sign = +1 for LONG, -1 for SHORT
+```
+
+#### PnL Calculation
+```
+fees = positionUsd × feeRate × 2  // roundtrip fees
+
+For LONG positions:
+pnlUsd = (effectivePrice / entryFillPrice - 1) × positionUsd - fees
+
+For SHORT positions:
+pnlUsd = (entryFillPrice / effectivePrice - 1) × positionUsd - fees
+
+roi = pnlUsd / capitalUsd
+```
+
+### API Endpoints
+
+#### Portfolio Management
+
+- `GET /api/portfolio` - Get current portfolio state
+  ```json
+  {
+    "capitalUsd": 100,
+    "tradeHistory": [...],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "lastUpdated": "2024-01-01T00:00:00.000Z",
+    "meta": {
+      "disclaimer": "SIMULATION - NO REAL TXS",
+      "totalTrades": 5,
+      "timestamp": "2024-01-01T00:00:00.000Z"
+    }
+  }
+  ```
+
+- `GET /api/trades` - Get all trade history
+  ```json
+  {
+    "trades": [
+      {
+        "id": 1234567890,
+        "token": "SOL",
+        "decision": "LONG",
+        "entryPrice": 100,
+        "entryFillPrice": 100.0025,
+        "positionUsd": 50,
+        "finalPnlUsd": 2.45,
+        "finalRoi": 0.049,
+        "createdAt": "2024-01-01T00:00:00.000Z"
+      }
+    ],
+    "meta": {
+      "disclaimer": "SIMULATION - NO REAL TXS",
+      "count": 1
+    }
+  }
+  ```
+
+- `GET /api/trades/:id` - Get specific trade with full simulation data
+  ```json
+  {
+    "id": 1234567890,
+    "tokenSymbol": "SOL",
+    "decision": "LONG",
+    "simulation": {
+      "entryPrice": 100,
+      "entryFillPrice": 100.0025,
+      "positionUsd": 50,
+      "snapshots": [
+        {
+          "horizonSeconds": 60,
+          "timestamp": 1704067260000,
+          "marketPrice": 102.5,
+          "effectivePrice": 102.5025,
+          "pnlUsd": 1.24,
+          "roi": 0.0248
+        }
+      ],
+      "finalPnlUsd": 2.45,
+      "finalRoi": 0.049,
+      "meta": {
+        "priceSource": "coingecko",
+        "impactApplied": 0.0000125,
+        "feesApplied": 0.1,
+        "disclaimer": "SIMULATION - NO REAL TXS"
+      }
+    }
+  }
+  ```
+
+### Integration with Analysis
+
+When you request a trading analysis via `POST /api/analyze`, the response now includes simulation data:
+
+```json
+{
+  "success": true,
+  "analysis": {
+    "tokenSymbol": "SOL",
+    "decision": "LONG",
+    "confidence": 75,
+    "publicSummary": "SOL looking bullish...",
+    "simulationSummary": {
+      "finalPnlUsd": 2.45,
+      "finalRoi": 0.049,
+      "positionUsd": 50,
+      "priceSource": "coingecko",
+      "disclaimer": "SIMULATION - NO REAL TXS"
+    }
+  },
+  "meta": {
+    "disclaimer": "SIMULATION - NO REAL TXS"
+  }
+}
+```
+
+### Testing the Simulator
+
+Run the simulator tests:
+
+```bash
+# Test basic functionality
+node sim/test-v2.js
+
+# Test configuration system
+node sim/test-config.js
+
+# Run property-based tests
+node sim/run-simple-tests.js
+```
+
+### Price Data Sources
+
+1. **CoinGecko API** (Primary): Fetches real 24-hour minute-level price data
+2. **Synthetic Generation** (Fallback): Uses Geometric Brownian Motion when real data unavailable
+
+### Safety Features
+
+- **Prominent Disclaimers**: All responses include "SIMULATION - NO REAL TXS" warnings
+- **No Real Transactions**: Simulator never executes actual blockchain transactions
+- **Configurable Limits**: All parameters can be adjusted via environment variables
+- **Portfolio Isolation**: Simulated portfolio is separate from any real funds
+- **Auto-Apply Disabled**: PnL application to capital is disabled by default
+
+### Limitations
+
+- **Theoretical Results**: Simulations are theoretical and not investment advice
+- **Market Conditions**: Real trading involves additional complexities not modeled
+- **Slippage Approximation**: Price impact model is simplified
+- **No Market Hours**: Simulator doesn't account for market closures or holidays
 
 ## Payment System
 
