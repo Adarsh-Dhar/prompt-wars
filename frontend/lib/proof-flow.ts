@@ -7,7 +7,7 @@ import { Wallet, BN } from "@coral-xyz/anchor"
 import { requestProof, submitProof } from "./stake/client"
 import { fetchAgentProof } from "./agent-server"
 
-const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4000'
+const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4001'
 
 /**
  * Convert hex string to Uint8Array

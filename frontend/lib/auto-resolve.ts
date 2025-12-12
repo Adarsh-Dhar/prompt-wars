@@ -8,7 +8,7 @@ import { fetchProofRequest } from "./stake/client"
 import { fetchAgentProof, AgentLogsResponse } from "./agent-server"
 import { parseLogOutcome, validateProofData, type ProofData } from "./proof-parser"
 
-const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4000'
+const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4001'
 
 export interface AutoResolveResult {
   success: boolean

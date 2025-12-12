@@ -422,6 +422,99 @@ app.get('/api/logs', (req, res) => {
     res.json(logs);
 });
 
+// Get premium logs (x402 protected endpoint)
+app.get('/api/logs/premium', async (req, res) => {
+    try {
+        // Check for payment headers
+        const authHeader = req.headers.authorization;
+        const signature = authHeader ? authHeader.replace('Signature ', '') : null;
+        
+        if (!signature) {
+            return res.status(402).json({
+                error: 'Payment Required',
+                message: 'Premium logs require payment verification',
+                price: PEEK_PRICE,
+                currency: 'SOL',
+                recipient: SERVER_WALLET,
+                memo: 'Premium log access'
+            });
+        }
+        
+        // Verify payment
+        const paymentResult = await verifyPayment(signature, PEEK_PRICE);
+        
+        if (!paymentResult.valid) {
+            return res.status(402).json({
+                error: 'Payment verification failed',
+                message: paymentResult.error,
+                price: PEEK_PRICE,
+                currency: 'SOL',
+                recipient: SERVER_WALLET,
+                memo: 'Premium log access'
+            });
+        }
+        
+        // Return premium logs with full content
+        const premiumLogs = agentState.logs.map(log => ({
+            ...log,
+            text: log.text // Show all content including premium
+        }));
+        
+        // Add additional premium insights
+        const enhancedLogs = [
+            ...premiumLogs,
+            {
+                id: Date.now() + Math.random(),
+                timestamp: new Date().toISOString(),
+                text: "🔥 PREMIUM: Advanced market analysis reveals hidden patterns and whale movements",
+                isPremium: true,
+                meta: {
+                    confidence: 95,
+                    signals: ['bullish_divergence', 'volume_spike', 'whale_activity'],
+                    premiumInsight: true
+                }
+            },
+            {
+                id: Date.now() + Math.random() + 1,
+                timestamp: new Date().toISOString(),
+                text: "💎 PREMIUM: Portfolio optimization suggests rebalancing for maximum alpha generation",
+                isPremium: true,
+                meta: {
+                    portfolioAdvice: true,
+                    riskLevel: 'medium',
+                    premiumInsight: true
+                }
+            }
+        ];
+        
+        res.json({
+            status: 'success',
+            logs: enhancedLogs,
+            lastUpdate: Date.now(),
+            signature: signature,
+            chain_root_hash: crypto.createHash('sha256').update(JSON.stringify(enhancedLogs)).digest('hex'),
+            agent_public_key: agentKeypair.publicKey.toBase58(),
+            dramaStage: agentState.dramaStage,
+            emotion: agentState.emotion,
+            panicLevel: agentState.panicLevel,
+            greedLevel: agentState.greedLevel,
+            lastToken: agentState.lastToken,
+            meta: {
+                premium: true,
+                paymentVerified: true,
+                disclaimer: 'SIMULATION - NO REAL TXS'
+            }
+        });
+        
+    } catch (error) {
+        console.error('Premium logs error:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            message: 'Failed to fetch premium logs'
+        });
+    }
+});
+
 // Request trading analysis
 app.post('/api/analyze', async (req, res) => {
     try {

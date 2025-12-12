@@ -49,7 +49,7 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
         setLoading(true)
         // Always pass payment token if available
         const token = getPaymentToken()
-        const data = await fetchAgentLogs(token, connection, connected && publicKey ? { publicKey, connected, sendTransaction } as any : null)
+        const data = await fetchAgentLogs(agentId, token, connection, connected && publicKey ? { publicKey, connected, sendTransaction } as any : null)
 
         const baseLogs = data.logs || []
         const hasPaymentAccess = timeRemaining !== null && timeRemaining > 0
@@ -125,7 +125,7 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
       // Use fetchPremiumLogs which handles 402 payment flow automatically
       // It will trigger payment if needed and retry with signature
       const wallet = { publicKey, connected, sendTransaction } as any
-      const result = await fetchPremiumLogs(connection, wallet)
+      const result = await fetchPremiumLogs(agentId, connection, wallet)
       
       // Get the signature from the result (set by fetchPremiumLogs internally)
       const signature = result.signature

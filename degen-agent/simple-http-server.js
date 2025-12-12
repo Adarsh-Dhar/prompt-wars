@@ -59,11 +59,133 @@ const server = http.createServer((req, res) => {
                 }
             }));
         } else if (path === '/api/logs') {
-            res.writeHead(402);
+            // Check for payment authorization
+            const authHeader = req.headers.authorization;
+            
+            if (authHeader && authHeader.startsWith('Signature ')) {
+                // Payment provided, return premium logs
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    status: "ACTIVE",
+                    logs: [
+                        {
+                            id: "premium-1",
+                            timestamp: new Date().toISOString(),
+                            message: "🧠 Analyzing market sentiment... detecting FOMO patterns in retail traders",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-2", 
+                            timestamp: new Date().toISOString(),
+                            message: "📊 Technical analysis: RSI oversold, potential bounce incoming",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-3",
+                            timestamp: new Date().toISOString(),
+                            message: "💎 Diamond hands detected: whale accumulation at support levels",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-4",
+                            timestamp: new Date().toISOString(),
+                            message: "🚀 DEGEN MODE: High conviction play identified - LFG! 💎🙌",
+                            type: "thought"
+                        }
+                    ],
+                    lastUpdate: Date.now(),
+                    signature: authHeader.replace('Signature ', ''),
+                    chain_root_hash: "mock_chain_hash_" + Date.now(),
+                    agent_public_key: "11111111111111111111111111111112"
+                }));
+            } else {
+                // No payment, return 402
+                res.writeHead(402);
+                res.end(JSON.stringify({
+                    error: 'Payment Required',
+                    price: 0.05,
+                    currency: 'SOL',
+                    recipient: '11111111111111111111111111111112',
+                    memo: 'Premium CoT Access'
+                }));
+            }
+        } else if (path === '/api/logs/premium') {
+            // Check for payment authorization
+            const authHeader = req.headers.authorization;
+            
+            if (authHeader && authHeader.startsWith('Signature ')) {
+                // Payment provided, return premium logs
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    status: "ACTIVE",
+                    logs: [
+                        {
+                            id: "premium-1",
+                            timestamp: new Date().toISOString(),
+                            message: "🧠 Analyzing market sentiment... detecting FOMO patterns in retail traders",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-2", 
+                            timestamp: new Date().toISOString(),
+                            message: "📊 Technical analysis: RSI oversold, potential bounce incoming",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-3",
+                            timestamp: new Date().toISOString(),
+                            message: "💎 Diamond hands detected: whale accumulation at support levels",
+                            type: "thought"
+                        },
+                        {
+                            id: "premium-4",
+                            timestamp: new Date().toISOString(),
+                            message: "🚀 DEGEN MODE: High conviction play identified - LFG! 💎🙌",
+                            type: "thought"
+                        }
+                    ],
+                    lastUpdate: Date.now(),
+                    signature: authHeader.replace('Signature ', ''),
+                    chain_root_hash: "mock_chain_hash_" + Date.now(),
+                    agent_public_key: "11111111111111111111111111111112"
+                }));
+            } else {
+                // No payment, return 402
+                res.writeHead(402);
+                res.end(JSON.stringify({
+                    error: 'Payment Required',
+                    price: 0.05,
+                    currency: 'SOL',
+                    recipient: '11111111111111111111111111111112',
+                    memo: 'Premium CoT Access'
+                }));
+            }
+        } else if (path === '/api/stream') {
+            // Always return basic logs (no payment required for stream)
+            res.writeHead(200);
             res.end(JSON.stringify({
-                error: 'Payment Required',
-                message: 'This endpoint requires payment to access premium content',
-                paymentRequired: true
+                status: "IDLE",
+                logs: [
+                    {
+                        id: "public-1",
+                        timestamp: new Date().toISOString(),
+                        message: "Agent initialized and monitoring markets...",
+                        type: "system"
+                    },
+                    {
+                        id: "public-2",
+                        timestamp: new Date().toISOString(),
+                        message: "🤖 Degen Agent online! Ready to find the next moon mission! 🚀",
+                        type: "agent_speech"
+                    },
+                    {
+                        id: "redacted-1",
+                        timestamp: new Date().toISOString(),
+                        message: "[REDACTED - Premium access required]",
+                        type: "thought"
+                    }
+                ],
+                lastUpdate: Date.now()
             }));
         } else {
             res.writeHead(404);
