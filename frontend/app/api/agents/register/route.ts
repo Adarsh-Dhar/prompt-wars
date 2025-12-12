@@ -1,133 +1,113 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { db } from "@/lib/db"
-import { getAgentStatus } from "@/lib/agent-server"
 
-// Map agent server status to database AgentStatus
-function mapAgentStatus(status: string): "IDLE" | "ACTIVE" | "COMPLETED" | "FAILED" {
-  const upperStatus = status.toUpperCase()
-  if (upperStatus === "ACTIVE" || upperStatus === "ANALYZING" || upperStatus === "TRADING") {
-    return "ACTIVE"
-  }
-  if (upperStatus === "SLEEPING" || upperStatus === "IDLE") {
-    return "IDLE"
-  }
-  if (upperStatus === "COMPLETED") {
-    return "COMPLETED"
-  }
-  if (upperStatus === "FAILED") {
-    return "FAILED"
-  }
-  return "IDLE"
-}
+const registerAgentSchema = z.object({
+  name: z.string().min(1, "Agent name is required"),
+  category: z.string().min(1, "Category is required"),
+  url: z.string().url("Valid URL is required"),
+  chainOfThoughtEndpoint: z.string().url("Valid chain-of-thought endpoint URL is required").optional(),
+})
 
 export async function POST(request: Request) {
   try {
-    // Fetch agent status from agent server
-    let agentServerStatus
-    try {
-      agentServerStatus = await getAgentStatus()
-    } catch (error) {
-      console.error("Error fetching agent server status:", error)
+    const body = await request.json()
+    const data = registerAgentSchema.parse(body)
+
+    // Check if agent with this name already exists
+    const existingAgent = await db.agent.findUnique({
+      where: { name: data.name },
+    })
+
+    if (existingAgent) {
       return NextResponse.json(
-        { error: "Failed to connect to agent server. Make sure it's running on port 4000." },
-        { status: 503 }
+        { error: "Agent with this name already exists" },
+        { status: 400 }
       )
     }
 
-    const agentName = "Nexus"
-    const agentCategory = "Trading Bots"
-    const dbStatus = mapAgentStatus(agentServerStatus.status)
+    // Verify agent endpoint is reachable (more lenient validation)
+    try {
+      const response = await fetch(data.url, { 
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(5000)
+      })
+      
+      // Accept any response that indicates the server is running
+      // This includes 200, 402, 404, 500, etc. - as long as we get a response
+      console.log(`Agent endpoint ${data.url} returned status: ${response.status}`)
+    } catch (error: any) {
+      // Only fail if we can't connect at all (network error, timeout, etc.)
+      if (error.name === 'AbortError' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        return NextResponse.json(
+          { error: "Agent endpoint is not reachable - please ensure the server is running" },
+          { status: 400 }
+        )
+      }
+      // For other errors, log but continue (server might be running but having issues)
+      console.warn(`Agent endpoint validation warning:`, error.message)
+    }
 
-    // Check if agent already exists
-    let agent = await db.agent.findUnique({
-      where: { name: agentName },
-      include: { stats: true },
+    // If chain-of-thought endpoint is provided, verify it's reachable (lenient)
+    if (data.chainOfThoughtEndpoint) {
+      try {
+        const response = await fetch(data.chainOfThoughtEndpoint, { 
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000)
+        })
+        
+        console.log(`Chain-of-thought endpoint ${data.chainOfThoughtEndpoint} returned status: ${response.status}`)
+      } catch (error: any) {
+        // Only fail for network connectivity issues
+        if (error.name === 'AbortError' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+          return NextResponse.json(
+            { error: "Chain-of-thought endpoint is not reachable - please ensure the server is running" },
+            { status: 400 }
+          )
+        }
+        console.warn(`Chain-of-thought endpoint validation warning:`, error.message)
+      }
+    }
+
+    // Create agent with initial stats
+    const agent = await db.agent.create({
+      data: {
+        name: data.name,
+        category: data.category,
+        url: data.url,
+        chainOfThoughtEndpoint: data.chainOfThoughtEndpoint,
+        status: "IDLE",
+        stats: {
+          create: {
+            currentPnL: 0,
+            compute: 0,
+            status: "IDLE",
+          },
+        },
+      },
+      include: {
+        stats: true,
+      },
     })
 
-    if (agent) {
-      // Update existing agent
-      agent = await db.agent.update({
-        where: { id: agent.id },
-        data: {
-          status: dbStatus,
-          stats: {
-            upsert: {
-              create: {
-                currentPnL: 0,
-                compute: 0,
-                status: agentServerStatus.status,
-              },
-              update: {
-                status: agentServerStatus.status,
-                lastUpdated: new Date(),
-              },
-            },
-          },
-        },
-        include: { stats: true },
-      })
-
-      return NextResponse.json({
-        message: "Agent updated successfully",
-        agent,
-      })
-    } else {
-      // Create new agent
-      agent = await db.agent.create({
-        data: {
-          name: agentName,
-          category: agentCategory,
-          status: dbStatus,
-          stats: {
-            create: {
-              currentPnL: 0,
-              compute: 0,
-              status: agentServerStatus.status,
-            },
-          },
-        },
-        include: { stats: true },
-      })
-
-      // Optionally create a test mission and market
-      const now = new Date()
-      const endTime = new Date(now.getTime() + 60 * 60 * 1000) // 1 hour from now
-
-      const mission = await db.mission.create({
-        data: {
-          agentId: agent.id,
-          description: agentServerStatus.mission || "Autonomous Hedge Fund - Find Alpha and Trade",
-          startTime: now,
-          endTime: endTime,
-          status: "ACTIVE",
-          category: agentCategory,
-          market: {
-            create: {
-              moonPrice: 0.5,
-              rugPrice: 0.5,
-              totalVolume: 0,
-              liquidity: 0,
-              participants: 0,
-            },
-          },
-        },
-        include: { market: true },
-      })
-
-      return NextResponse.json({
-        message: "Agent registered successfully",
-        agent: {
-          ...agent,
-          mission,
-        },
-      })
-    }
+    return NextResponse.json({ 
+      message: "Agent registered successfully",
+      agent 
+    }, { status: 201 })
   } catch (error: any) {
     console.error("Error registering agent:", error)
-    return NextResponse.json(
-      { error: "Failed to register agent", details: error.message },
-      { status: 500 }
-    )
+    if (error.name === "ZodError") {
+      return NextResponse.json(
+        { error: "Invalid request data", details: error.errors },
+        { status: 400 }
+      )
+    }
+    return NextResponse.json({ 
+      error: "Failed to register agent",
+      details: error.message 
+    }, { status: 500 })
   }
 }
-

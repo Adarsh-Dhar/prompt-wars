@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
-import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor"
+import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor"
 import { agentRegistryIdl, AGENT_REGISTRY_PROGRAM_ID, AgentRegistryIdl } from "./agent-registry-idl"
 
 const PROGRAM_ID = new anchor.web3.PublicKey(AGENT_REGISTRY_PROGRAM_ID)
@@ -8,21 +8,33 @@ const AGENT_SEED = Buffer.from("agent")
 const VAULT_SEED = Buffer.from("vault")
 const REQUEST_SEED = Buffer.from("request")
 
-type MinimalWallet = Wallet & {
-  publicKey: anchor.web3.PublicKey
-}
-
-const dummyWallet: MinimalWallet = {
+const dummyWallet = {
   publicKey: anchor.web3.PublicKey.default,
-  signTransaction: async (tx) => tx,
-  signAllTransactions: async (txs) => txs,
+  signTransaction: async (tx: any) => tx,
+  signAllTransactions: async (txs: any[]) => txs,
 }
 
 export function getProgram(connection: anchor.web3.Connection, wallet?: Wallet) {
-  const provider = new AnchorProvider(connection, (wallet as MinimalWallet) ?? dummyWallet, {
-    commitment: "confirmed",
-  })
-  return new Program(agentRegistryIdl as AgentRegistryIdl, PROGRAM_ID, provider)
+  try {
+    const provider = new AnchorProvider(connection, (wallet as any) ?? dummyWallet, {
+      commitment: "confirmed",
+    })
+    
+    // Create a complete IDL with types field for proper account deserialization
+    const completeIdl = {
+      version: "0.1.0",
+      name: "agent_registry",
+      address: AGENT_REGISTRY_PROGRAM_ID,
+      instructions: agentRegistryIdl.instructions,
+      accounts: agentRegistryIdl.accounts,
+      types: agentRegistryIdl.types, // This is required for account deserialization
+    }
+    
+    return new Program(completeIdl as any, provider)
+  } catch (error) {
+    console.error("Error creating program:", error)
+    throw new Error(`Failed to create program: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 }
 
 export function getRegistryPda() {
@@ -63,9 +75,25 @@ export type ProofRequestAccount = {
 }
 
 export async function fetchRegistry(connection: anchor.web3.Connection) {
-  const program = getProgram(connection)
-  const registry = getRegistryPda()
-  return program.account.registry.fetchNullable(registry) as Promise<RegistryAccount | null>
+  try {
+    const program = getProgram(connection)
+    const registry = getRegistryPda()
+    
+    // Check if the registry account exists first
+    const accountInfo = await connection.getAccountInfo(registry)
+    if (!accountInfo) {
+      return null // Registry not initialized yet
+    }
+    
+    return await (program.account as any).registry.fetchNullable(registry) as Promise<RegistryAccount | null>
+  } catch (error) {
+    console.error("Error fetching registry:", error)
+    // If it's a deserialization error, the registry might not be initialized
+    if (error instanceof Error && error.message.includes('_bn')) {
+      return null
+    }
+    throw error
+  }
 }
 
 /**
@@ -214,7 +242,7 @@ export async function fetchProofRequest(params: {
   const proofRequest = getProofRequestPda(agent, new Uint8Array(marketIdArray))
 
   try {
-    const account = await program.account.proofRequest.fetchNullable(proofRequest)
+    const account = await (program.account as any).ProofRequest.fetchNullable(proofRequest)
     return account as ProofRequestAccount | null
   } catch (error) {
     console.error("Error fetching proof request:", error)

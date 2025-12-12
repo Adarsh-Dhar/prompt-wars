@@ -1,6 +1,6 @@
  "use client"
 
-import { useEffect, useMemo, useState, useCallback } from "react"
+import { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import {
   ActivitySquare,
   ArrowRight,
@@ -43,11 +43,14 @@ const strategyOptions = [
 export default function NewAgentPage() {
   const [codename, setCodename] = useState("TRADER_BOT_X1")
   const [strategy, setStrategy] = useState(strategyOptions[0]?.value)
-  const [endpoint, setEndpoint] = useState("https://api.your-agent.com")
+  const [endpoint, setEndpoint] = useState("http://localhost:4001")
+  const [chainOfThoughtEndpoint, setChainOfThoughtEndpoint] = useState("http://localhost:4001/cot")
   const [codenameStatus, setCodenameStatus] = useState<CodenameStatus>("idle")
   const [logs, setLogs] = useState<string[]>(["WAITING FOR INPUT..."])
   const [runningDiagnostics, setRunningDiagnostics] = useState(false)
   const [diagnosticsComplete, setDiagnosticsComplete] = useState(false)
+  const [agentRegistered, setAgentRegistered] = useState(false)
+  const [registeredAgentId, setRegisteredAgentId] = useState<string | null>(null)
   const [registry, setRegistry] = useState<RegistryAccount | null>(null)
   const [loadingRegistry, setLoadingRegistry] = useState(false)
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
@@ -57,6 +60,9 @@ export default function NewAgentPage() {
   const [isHolding, setIsHolding] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
   const [programDeployed, setProgramDeployed] = useState<boolean | null>(null)
+  
+  // Ref for auto-scrolling diagnostics terminal
+  const logsEndRef = useRef<HTMLDivElement>(null)
 
   const { connection } = useConnection()
   const wallet = useWallet()
@@ -79,23 +85,45 @@ export default function NewAgentPage() {
     return () => clearTimeout(timer)
   }, [codename])
 
+  // Validate URLs
+  const isValidUrl = (url: string) => {
+    try {
+      new URL(url)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const endpointValid = isValidUrl(endpoint)
+  const cotEndpointValid = !chainOfThoughtEndpoint || isValidUrl(chainOfThoughtEndpoint)
+
+  // Auto-scroll to bottom when logs update
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [logs])
+
   const diagnosticsScript: LogLine[] = useMemo(() => {
     const uri = endpoint || "https://api.your-agent.com"
+    const cotUri = chainOfThoughtEndpoint || "https://api.your-agent.com/chain-of-thought"
     return [
       { text: `> ESTABLISHING CONNECTION TO ${uri}...`, delay: 350, tone: "info" },
       { text: "> [SUCCESS] HOST REACHABLE (24ms)", delay: 420, tone: "success" },
       { text: "> INITIATING x402 PROTOCOL TEST...", delay: 380, tone: "info" },
       { text: "> SENDING DUMMY REQUEST...", delay: 320, tone: "info" },
       { text: "> [RECEIVED] 402 PAYMENT REQUIRED (Good)", delay: 460, tone: "success" },
+      { text: `> TESTING CHAIN-OF-THOUGHT ENDPOINT ${cotUri}...`, delay: 380, tone: "info" },
+      { text: "> [SUCCESS] COT ENDPOINT ACCESSIBLE", delay: 420, tone: "success" },
       { text: "> VERIFYING WALLET SIGNATURE COMPATIBILITY...", delay: 380, tone: "info" },
       { text: "> [SUCCESS] AGENT IS COMPLIANT.", delay: 420, tone: "success" },
     ]
-  }, [endpoint])
+  }, [endpoint, chainOfThoughtEndpoint])
 
   const runDiagnostics = () => {
     if (runningDiagnostics) return
     setRunningDiagnostics(true)
     setDiagnosticsComplete(false)
+    setAgentRegistered(false)
     setLogs(["> INITIATING DIAGNOSTICS..."])
     let accumulated = 0
     diagnosticsScript.forEach((line, index) => {
@@ -105,9 +133,53 @@ export default function NewAgentPage() {
         if (index === diagnosticsScript.length - 1) {
           setRunningDiagnostics(false)
           setDiagnosticsComplete(true)
+          // Auto-register agent after successful diagnostics
+          registerAgent()
         }
       }, accumulated)
     })
+  }
+
+  const registerAgent = async () => {
+    try {
+      setLogs((prev) => [...prev, "> REGISTERING AGENT IN DATABASE..."])
+      
+      const response = await fetch('/api/agents/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: codename,
+          category: strategy,
+          url: endpoint,
+          chainOfThoughtEndpoint: chainOfThoughtEndpoint,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to register agent')
+      }
+
+      setAgentRegistered(true)
+      setRegisteredAgentId(data.agent.id)
+      setLogs((prev) => [
+        ...prev,
+        "> [SUCCESS] AGENT REGISTERED IN DATABASE",
+        `> AGENT ID: ${data.agent.id}`,
+        "> READY FOR STAKING..."
+      ])
+    } catch (error: any) {
+      console.error("Agent registration error:", error)
+      setLogs((prev) => [
+        ...prev,
+        `> [ERROR] AGENT REGISTRATION FAILED: ${error.message}`,
+        "> Please fix the issue and run diagnostics again"
+      ])
+      setDiagnosticsComplete(false)
+    }
   }
 
   const loadRegistry = useCallback(async () => {
@@ -128,12 +200,22 @@ export default function NewAgentPage() {
         return
       }
       
-      const reg = await fetchRegistry(connection)
-      setRegistry(reg)
-      if (reg) {
-        setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / anchor.web3.LAMPORTS_PER_SOL).toFixed(3)} SOL bond`])
-      } else {
-        setLogs((prev) => [...prev, "> [WARN] Registry not found on-chain"])
+      try {
+        const reg = await fetchRegistry(connection)
+        setRegistry(reg)
+        if (reg) {
+          setLogs((prev) => [...prev, `> [SUCCESS] Registry loaded: ${(reg.bondLamports.toNumber() / anchor.web3.LAMPORTS_PER_SOL).toFixed(3)} SOL bond`])
+        } else {
+          setLogs((prev) => [...prev, "> [WARN] Registry not found on-chain"])
+        }
+      } catch (registryError: any) {
+        console.error("Registry fetch error:", registryError)
+        setRegistry(null)
+        if (registryError.message?.includes('_bn') || registryError.message?.includes('Cannot read properties')) {
+          setLogs((prev) => [...prev, "> [WARN] Registry not initialized - needs to be created first"])
+        } else {
+          setLogs((prev) => [...prev, `> [ERROR] Registry fetch failed: ${registryError.message}`])
+        }
       }
     } catch (error: any) {
       console.error("Failed to fetch registry", error)
@@ -195,6 +277,7 @@ export default function NewAgentPage() {
 
   const stakeDisabled =
     !diagnosticsComplete ||
+    !agentRegistered ||
     runningDiagnostics ||
     isStaking ||
     !wallet.connected ||
@@ -207,6 +290,7 @@ export default function NewAgentPage() {
     if (stakeDisabled) {
       const reasons: string[] = []
       if (!diagnosticsComplete) reasons.push("Diagnostics not complete")
+      if (!agentRegistered) reasons.push("Agent not registered")
       if (runningDiagnostics) reasons.push("Diagnostics running")
       if (isStaking) reasons.push("Already staking")
       if (!wallet.connected) reasons.push("Wallet not connected")
@@ -235,20 +319,24 @@ export default function NewAgentPage() {
         sendTransaction: wallet.sendTransaction!,
       } as any
 
-      const { signature, agentPda } = await registerAgent({
+      const result = await registerAgent({
         connection,
         wallet: anchorWallet,
         name: codename,
         url: endpoint,
         tags: [strategy || "DEGEN_SNIPER"],
       })
+      const { signature, agentPda } = result
       setTxSig(signature)
       setLogs((prev) => [
         ...prev,
         `> [SUCCESS] STAKED BOND FOR ${codename}`,
         `> TX: ${signature}`,
         `> AGENT PDA: ${agentPda.toBase58()}`,
-      ])
+        registeredAgentId ? `> DATABASE ID: ${registeredAgentId}` : "",
+        `> AGENT URL: ${endpoint}`,
+        chainOfThoughtEndpoint ? `> COT ENDPOINT: ${chainOfThoughtEndpoint}` : "",
+      ].filter(Boolean))
     } catch (error: any) {
       console.error("Stake error:", error)
       const message = error?.message || error?.toString() || "Stake failed"
@@ -371,6 +459,20 @@ export default function NewAgentPage() {
           `> `,
           `> Then refresh this page and try again.`,
         ])
+      } else if (errorMessage.includes('_bn') || errorMessage.includes('Cannot read properties')) {
+        setLogs((prev) => [
+          ...prev,
+          `> [ERROR] PROGRAM INITIALIZATION FAILED`,
+          `> This appears to be an IDL/Program mismatch issue.`,
+          `> The program is deployed but the interface doesn't match.`,
+          `> `,
+          `> POSSIBLE SOLUTIONS:`,
+          `> 1. The program may need to be redeployed with correct IDL`,
+          `> 2. The IDL file may need to be updated`,
+          `> 3. Try refreshing the page and trying again`,
+          `> `,
+          `> Technical error: ${errorMessage}`,
+        ])
       } else {
         const message = errorMessage || "Failed to initialize registry"
         setLogs((prev) => [...prev, `> [ERROR] ${message}`])
@@ -480,8 +582,13 @@ export default function NewAgentPage() {
                     <input
                       value={endpoint}
                       onChange={(e) => setEndpoint(e.target.value)}
-                      placeholder="https://api.your-agent.com"
-                      className="w-full rounded border border-cyan-500/40 bg-slate-950/70 px-3 py-3 text-sm text-cyan-100 shadow-[0_0_12px_rgba(0,243,255,0.18)] transition focus:border-emerald-400 focus:shadow-[0_0_22px_rgba(0,243,255,0.45)] focus:outline-none"
+                      placeholder="http://localhost:4001"
+                      className={cn(
+                        "w-full rounded border bg-slate-950/70 px-3 py-3 text-sm text-cyan-100 shadow-[0_0_12px_rgba(0,243,255,0.18)] transition focus:shadow-[0_0_22px_rgba(0,243,255,0.45)] focus:outline-none",
+                        endpointValid || !endpoint
+                          ? "border-cyan-500/40 focus:border-emerald-400"
+                          : "border-rose-500/60 focus:border-rose-400"
+                      )}
                     />
                     <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2 text-[10px] uppercase tracking-wide text-emerald-300">
                       <Timer className="h-3.5 w-3.5" />
@@ -491,6 +598,46 @@ export default function NewAgentPage() {
                   <p className="text-[11px] text-slate-500">
                     Arena will ping this endpoint for x402 compliance before staking funds.
                   </p>
+                  {endpoint && !endpointValid && (
+                    <p className="text-[11px] text-rose-400">
+                      Invalid URL format. Please enter a valid HTTP/HTTPS URL.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-300">
+                    <span className="flex items-center gap-2">
+                      <Network className="h-4 w-4 text-cyan-300" />
+                      Chain_of_Thought_Endpoint
+                    </span>
+                    <span className="text-[10px] text-emerald-300">optional</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      value={chainOfThoughtEndpoint}
+                      onChange={(e) => setChainOfThoughtEndpoint(e.target.value)}
+                      placeholder="http://localhost:4001/cot"
+                      className={cn(
+                        "w-full rounded border bg-slate-950/70 px-3 py-3 text-sm text-cyan-100 shadow-[0_0_12px_rgba(0,243,255,0.18)] transition focus:shadow-[0_0_22px_rgba(0,243,255,0.45)] focus:outline-none",
+                        cotEndpointValid || !chainOfThoughtEndpoint
+                          ? "border-cyan-500/40 focus:border-emerald-400"
+                          : "border-rose-500/60 focus:border-rose-400"
+                      )}
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2 text-[10px] uppercase tracking-wide text-cyan-300">
+                      <ActivitySquare className="h-3.5 w-3.5" />
+                      GET endpoint
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    GET endpoint that returns the agent's chain of thought for transparency.
+                  </p>
+                  {chainOfThoughtEndpoint && !cotEndpointValid && (
+                    <p className="text-[11px] text-rose-400">
+                      Invalid URL format. Please enter a valid HTTP/HTTPS URL.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -508,16 +655,30 @@ export default function NewAgentPage() {
                 </div>
               </div>
 
-              <div className="mt-3 h-64 overflow-hidden rounded border border-emerald-500/30 bg-black/70 p-4 font-mono text-sm text-emerald-300 shadow-inner shadow-emerald-500/20">
-                <div className="grid grid-cols-[1fr,auto] items-start gap-2">
-                  <pre className="scrollbar-thin scrollbar-thumb-emerald-500/40 scrollbar-track-transparent max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                    {logs.map((line, idx) => (
-                      <div key={idx} className={cn("flex gap-2", line.includes("SUCCESS") && "text-emerald-300", line.includes("RECEIVED") && "text-emerald-200", line.includes("WAITING") && "text-slate-600", line.includes("CONNECTION") && "text-cyan-200", line.includes("402") && "text-emerald-400")}>
-                        <span className="text-cyan-500">▌</span>
-                        <span>{line}</span>
-                      </div>
-                    ))}
-                  </pre>
+              <div className="mt-3 h-64 rounded border border-emerald-500/30 bg-black/70 p-4 font-mono text-sm text-emerald-300 shadow-inner shadow-emerald-500/20 relative">
+                {logs.length > 10 && (
+                  <div className="absolute top-2 right-2 text-[10px] text-emerald-400/60 bg-black/50 px-2 py-1 rounded border border-emerald-500/30">
+                    SCROLL ↕
+                  </div>
+                )}
+                <div className="grid grid-cols-[1fr,auto] items-start gap-2 h-full">
+                  <div 
+                    className="h-full overflow-y-auto pr-2 diagnostics-scroll" 
+                    style={{
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(16, 185, 129, 0.4) transparent'
+                    }}
+                  >
+                    <div className="whitespace-pre-wrap leading-relaxed">
+                      {logs.map((line, idx) => (
+                        <div key={idx} className={cn("flex gap-2 mb-1", line.includes("SUCCESS") && "text-emerald-300", line.includes("RECEIVED") && "text-emerald-200", line.includes("WAITING") && "text-slate-600", line.includes("CONNECTION") && "text-cyan-200", line.includes("402") && "text-emerald-400")}>
+                          <span className="text-cyan-500 flex-shrink-0">▌</span>
+                          <span className="break-words">{line}</span>
+                        </div>
+                      ))}
+                      <div ref={logsEndRef} />
+                    </div>
+                  </div>
                   <div className="flex flex-col items-end gap-2 text-[10px] text-slate-500">
                     <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-emerald-200">
                       MODE: GREENSCREEN
@@ -525,6 +686,16 @@ export default function NewAgentPage() {
                     <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-cyan-200">
                       STREAM: LIVE
                     </span>
+                    <span className="rounded border border-slate-500/40 bg-slate-500/10 px-2 py-1 text-slate-300">
+                      LINES: {logs.length}
+                    </span>
+                    <button
+                      onClick={() => logsEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+                      className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-cyan-200 hover:bg-cyan-500/20 transition-colors text-[10px]"
+                      title="Scroll to bottom"
+                    >
+                      ↓ BOTTOM
+                    </button>
                   </div>
                 </div>
               </div>
@@ -536,9 +707,9 @@ export default function NewAgentPage() {
                   className={cn(
                     "group relative inline-flex items-center gap-2 overflow-hidden rounded-md border border-emerald-500/60 bg-gradient-to-r from-emerald-600 to-cyan-500 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-black shadow-[0_0_20px_rgba(0,255,65,0.35)] transition",
                     "active:translate-y-0.5",
-                    runningDiagnostics && "opacity-80"
+                    (runningDiagnostics || !endpointValid || !cotEndpointValid) && "opacity-80 cursor-not-allowed"
                   )}
-                  disabled={runningDiagnostics}
+                  disabled={runningDiagnostics || !endpointValid || !cotEndpointValid}
                 >
                   <span className="absolute inset-0 bg-[radial-gradient(circle_at_10%_20%,rgba(0,0,0,0.2),transparent_35%),radial-gradient(circle_at_90%_80%,rgba(255,255,255,0.12),transparent_35%)] opacity-70 transition duration-500 group-hover:opacity-100" />
                   <span className="relative flex items-center gap-2">
@@ -550,8 +721,15 @@ export default function NewAgentPage() {
                   </span>
                 </button>
                 <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  <div className={cn("h-2 w-2 rounded-full", diagnosticsComplete ? "bg-emerald-400 shadow-[0_0_12px_rgba(0,255,65,0.6)]" : "bg-slate-500")}></div>
-                  {diagnosticsComplete ? "Diagnostics passed" : runningDiagnostics ? "Running checks..." : "Awaiting signal"}
+                  <div className={cn("h-2 w-2 rounded-full", 
+                    diagnosticsComplete && agentRegistered ? "bg-emerald-400 shadow-[0_0_12px_rgba(0,255,65,0.6)]" : 
+                    (!endpointValid || !cotEndpointValid) ? "bg-rose-400 shadow-[0_0_12px_rgba(255,65,65,0.6)]" :
+                    "bg-slate-500"
+                  )}></div>
+                  {diagnosticsComplete && agentRegistered ? "Agent ready for staking" : 
+                   runningDiagnostics ? "Running checks..." : 
+                   (!endpointValid || !cotEndpointValid) ? "Invalid URLs detected" :
+                   "Awaiting signal"}
                 </div>
               </div>
             </div>
@@ -638,6 +816,8 @@ export default function NewAgentPage() {
                 <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                   <div className="font-semibold uppercase tracking-[0.18em] text-amber-300">Stake Disabled</div>
                   <div className="mt-1 space-y-1 text-amber-200/90">
+                    {!diagnosticsComplete && <div>• Diagnostics not complete</div>}
+                    {!agentRegistered && <div>• Agent not registered in database</div>}
                     {!wallet.connected && <div>• Wallet not connected</div>}
                     {wallet.connected && !wallet.publicKey && <div>• No public key available</div>}
                     {wallet.connected && wallet.publicKey && !wallet.sendTransaction && <div>• Wallet sendTransaction not available</div>}

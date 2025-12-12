@@ -293,7 +293,7 @@ pub struct RegisterAgent<'info> {
         space = 8 + Agent::LEN
     )]
     pub agent: Account<'info, Agent>,
-    /// Agent wants funds to flow to this wallet; doesn't need to be signer.
+    /// CHECK: Agent wants funds to flow to this wallet; doesn't need to be signer.
     pub agent_wallet: UncheckedAccount<'info>,
     /// CHECK: Vault PDA for agent bond escrow
     #[account(mut)]

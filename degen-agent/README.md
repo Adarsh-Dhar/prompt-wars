@@ -146,6 +146,23 @@ The agent registers with the frontend using these details:
 
 - `GET /api/current-analysis` - Get the latest analysis
 
+- `GET /api/chain-of-thought` or `GET /cot` - Get agent's chain of thought
+  ```json
+  {
+    "chainOfThought": {
+      "reasoning": "Detailed analysis reasoning...",
+      "marketAnalysis": "Token: BTC | Price: $45000 | Decision: LONG | Confidence: 85%",
+      "riskAssessment": "Risk Level: LOW - High confidence trade with strong conviction",
+      "degenCommentary": "🚀 This is it chief! Going LONG with diamond hands! 💎🙌",
+      "confidence": 85,
+      "timestamp": "2024-12-12T15:51:16.000Z",
+      "tokenSymbol": "BTC",
+      "decision": "LONG",
+      "status": "IDLE"
+    }
+  }
+  ```
+
 ### Payment-Gated Endpoints
 
 - `POST /api/unlock` - Unlock premium content with payment

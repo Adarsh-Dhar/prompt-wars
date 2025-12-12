@@ -279,6 +279,21 @@ async function generateTradingAnalysis(tokenSymbol, currentPrice = null) {
         agentState.currentAnalysis = analysis;
         agentState.tradingDecisions.push(analysis);
         
+        // Generate and store chain of thought
+        const chainOfThought = {
+            id: analysis.id,
+            reasoning: analysis.premiumAnalysis,
+            marketAnalysis: buildMarketAnalysis(analysis),
+            riskAssessment: buildRiskAssessment(analysis),
+            degenCommentary: buildDegenCommentary(analysis),
+            confidence: analysis.confidence,
+            timestamp: analysis.timestamp,
+            tokenSymbol: analysis.tokenSymbol,
+            decision: analysis.decision
+        };
+        
+        agentState.chainOfThoughts.push(chainOfThought);
+        
         // Broadcast public summary
         broadcastPublicPremium(
             `📊 ${tokenSymbol} Analysis: ${analysis.publicSummary}`,
@@ -532,7 +547,154 @@ app.get('/api/current-analysis', (req, res) => {
     });
 });
 
-// Health check
+// Helper functions for chain of thought generation
+function buildMarketAnalysis(analysis) {
+    if (!analysis) return "No market data available";
+    
+    const parts = [
+        `Token: ${analysis.tokenSymbol}`,
+        analysis.currentPrice ? `Price: $${analysis.currentPrice}` : null,
+        `Decision: ${analysis.decision}`,
+        `Confidence: ${analysis.confidence}%`,
+        analysis.simulation ? `Simulated PnL: ${analysis.simulation.finalPnlUsd >= 0 ? '+' : ''}$${analysis.simulation.finalPnlUsd.toFixed(2)}` : null
+    ].filter(Boolean);
+    
+    return parts.join(' | ');
+}
+
+function buildRiskAssessment(analysis) {
+    if (!analysis) return "Risk assessment unavailable";
+    
+    const confidence = analysis.confidence || 0;
+    let riskLevel = "UNKNOWN";
+    let riskDescription = "";
+    
+    if (confidence >= 80) {
+        riskLevel = "LOW";
+        riskDescription = "High confidence trade with strong conviction";
+    } else if (confidence >= 60) {
+        riskLevel = "MEDIUM";
+        riskDescription = "Moderate confidence, standard position sizing recommended";
+    } else if (confidence >= 40) {
+        riskLevel = "HIGH";
+        riskDescription = "Lower confidence, reduce position size";
+    } else {
+        riskLevel = "VERY HIGH";
+        riskDescription = "Low confidence, consider avoiding or minimal exposure";
+    }
+    
+    return `Risk Level: ${riskLevel} - ${riskDescription}. Confidence: ${confidence}%`;
+}
+
+function buildDegenCommentary(analysis) {
+    if (!analysis) return "🤖 No trades, no gains, no pains. Just waiting for the next opportunity! 💎";
+    
+    const confidence = analysis.confidence || 0;
+    const decision = analysis.decision;
+    const pnl = analysis.simulation?.finalPnlUsd;
+    
+    const degenPhrases = {
+        high_confidence_long: ["🚀 This is it chief! Going LONG with diamond hands! 💎🙌", "📈 Aping in LONG! This one's going to the moon! 🌙", "💪 High conviction LONG play. LFG! 🔥"],
+        high_confidence_short: ["📉 Time to short this! Bear market vibes! 🐻", "💰 Going SHORT with confidence. Easy money! 📉", "🎯 SHORT setup looking juicy. Let's get this bread! 💸"],
+        medium_confidence: ["🤔 Decent setup but not going full degen. Measured play! ⚖️", "📊 Solid analysis, reasonable position. Playing it smart! 🧠", "💡 Good opportunity but keeping it controlled. Risk management! 🛡️"],
+        low_confidence: ["😅 Eh, not feeling this one too much. Small bag only! 👝", "🤷 Meh setup. Maybe just a tiny position for fun? 🎲", "⚠️ Low conviction play. Probably better to wait! ⏳"],
+        profitable: ["💰 Bag secured! Profit is profit! 📈", "🎉 Green candles baby! This is why we do this! 💚", "🔥 Called it! Diamond hands paying off! 💎"],
+        loss: ["😭 Rekt but not defeated! Learning experience! 📚", "💸 Took an L but that's the game. Next one! 🔄", "🤕 Ouch, that hurt. But we bounce back stronger! 💪"]
+    };
+    
+    let commentary = "";
+    
+    if (pnl !== undefined) {
+        commentary = pnl >= 0 ? 
+            degenPhrases.profitable[Math.floor(Math.random() * degenPhrases.profitable.length)] :
+            degenPhrases.loss[Math.floor(Math.random() * degenPhrases.loss.length)];
+    } else if (confidence >= 75) {
+        const phrases = decision === 'LONG' ? degenPhrases.high_confidence_long : degenPhrases.high_confidence_short;
+        commentary = phrases[Math.floor(Math.random() * phrases.length)];
+    } else if (confidence >= 50) {
+        commentary = degenPhrases.medium_confidence[Math.floor(Math.random() * degenPhrases.medium_confidence.length)];
+    } else {
+        commentary = degenPhrases.low_confidence[Math.floor(Math.random() * degenPhrases.low_confidence.length)];
+    }
+    
+    return commentary;
+}
+
+// Chain of Thought endpoint - GET /api/chain-of-thought or /cot
+app.get(['/api/chain-of-thought', '/cot'], (req, res) => {
+    try {
+        // Simple implementation to avoid errors
+        const latestAnalysis = agentState.currentAnalysis || (agentState.tradingDecisions && agentState.tradingDecisions.length > 0 ? agentState.tradingDecisions[agentState.tradingDecisions.length - 1] : null);
+        
+        if (!latestAnalysis) {
+            return res.json({
+                chainOfThought: {
+                    reasoning: "No recent analysis available. Agent is in IDLE state, waiting for trading opportunities.",
+                    marketAnalysis: "Market conditions are being monitored. No active positions or analysis at this time.",
+                    riskAssessment: "Risk level: LOW - No active trades or positions.",
+                    degenCommentary: "🤖 Just vibing and waiting for the next moon mission. LFG when the setup is right! 💎🙌",
+                    confidence: 0,
+                    timestamp: new Date().toISOString(),
+                    status: agentState.status || "IDLE"
+                },
+                meta: {
+                    agent: "degen-agent",
+                    version: "1.0.0",
+                    disclaimer: "SIMULATION - NO REAL TXS",
+                    timestamp: new Date().toISOString()
+                }
+            });
+        }
+
+        // Build simple chain of thought
+        const chainOfThought = {
+            reasoning: latestAnalysis.premiumAnalysis || latestAnalysis.publicSummary || "Analysis in progress...",
+            marketAnalysis: `Token: ${latestAnalysis.tokenSymbol || 'N/A'} | Decision: ${latestAnalysis.decision || 'N/A'} | Confidence: ${latestAnalysis.confidence || 0}%`,
+            riskAssessment: `Risk Level: ${latestAnalysis.confidence >= 80 ? 'LOW' : latestAnalysis.confidence >= 60 ? 'MEDIUM' : 'HIGH'} - Confidence: ${latestAnalysis.confidence || 0}%`,
+            degenCommentary: "🚀 LFG! Diamond hands activated! 💎🙌",
+            confidence: latestAnalysis.confidence || 0,
+            timestamp: latestAnalysis.timestamp || new Date().toISOString(),
+            tokenSymbol: latestAnalysis.tokenSymbol,
+            decision: latestAnalysis.decision,
+            currentPrice: latestAnalysis.currentPrice,
+            status: agentState.status || "IDLE",
+            emotion: agentState.emotion || "CURIOUS"
+        };
+
+        res.json({
+            chainOfThought,
+            meta: {
+                agent: "degen-agent",
+                version: "1.0.0",
+                disclaimer: "SIMULATION - NO REAL TXS",
+                timestamp: new Date().toISOString(),
+                analysisId: latestAnalysis.id
+            }
+        });
+
+    } catch (error) {
+        console.error('Chain of thought error:', error);
+        res.status(500).json({
+            error: 'Failed to generate chain of thought',
+            details: error.message,
+            chainOfThought: {
+                reasoning: "Error generating chain of thought",
+                marketAnalysis: "Unable to analyze market conditions",
+                riskAssessment: "Risk assessment unavailable",
+                degenCommentary: "🤖 Oops, my brain is lagging. Try again in a moment! 🔄",
+                confidence: 0,
+                timestamp: new Date().toISOString(),
+                status: "ERROR"
+            }
+        });
+    }
+});
+
+// Simple test endpoint
+app.get('/test', (req, res) => {
+    res.json({ message: 'Test endpoint working', timestamp: new Date().toISOString() });
+});
+
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'healthy', 

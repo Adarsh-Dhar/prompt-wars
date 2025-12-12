@@ -178,6 +178,10 @@ curl http://localhost:4001/health
 
 # Check agent status
 curl http://localhost:4001/api/status
+
+# Get chain of thought
+curl http://localhost:4001/cot
+curl http://localhost:4001/api/chain-of-thought
 ```
 
 ### Log Monitoring

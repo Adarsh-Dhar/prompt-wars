@@ -242,3 +242,25 @@
 .pulse-neon {
   animation: pulse-neon 2s ease-in-out infinite;
 }
+
+/* Diagnostics terminal scrollbar */
+.diagnostics-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.diagnostics-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.diagnostics-scroll::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.4);
+  border-radius: 3px;
+}
+
+.diagnostics-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6);
+}
+
+.diagnostics-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

@@ -11,34 +11,13 @@ export async function GET(
     const agent = await db.agent.findUnique({
       where: { id: agentId },
       include: {
-        missions: {
-          include: {
-            market: {
-              include: {
-                bets: {
-                  where: {
-                    status: "ACTIVE",
-                  },
-                  take: 10,
-                  orderBy: {
-                    createdAt: "desc",
-                  },
-                },
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
         stats: true,
+        missions: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
         logs: {
-          where: {
-            type: "PUBLIC",
-          },
-          orderBy: {
-            timestamp: "desc",
-          },
+          orderBy: { timestamp: 'desc' },
           take: 20,
         },
       },
@@ -49,9 +28,43 @@ export async function GET(
     }
 
     return NextResponse.json({ agent })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching agent:", error)
-    return NextResponse.json({ error: "Failed to fetch agent" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to fetch agent", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ agentId: string }> }
+) {
+  try {
+    const { agentId } = await params
+    const body = await request.json()
+
+    const agent = await db.agent.update({
+      where: { id: agentId },
+      data: {
+        ...body,
+        updatedAt: new Date(),
+      },
+      include: {
+        stats: true,
+      },
+    })
+
+    return NextResponse.json({ 
+      message: "Agent updated successfully",
+      agent 
+    })
+  } catch (error: any) {
+    console.error("Error updating agent:", error)
+    return NextResponse.json(
+      { error: "Failed to update agent", details: error.message },
+      { status: 500 }
+    )
+  }
+}
