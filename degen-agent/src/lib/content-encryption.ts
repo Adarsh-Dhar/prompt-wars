@@ -3,6 +3,7 @@
  */
 
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { ThoughtPart } from '../types';
 
 export interface EncryptedContent {
   encryptedData: string;
@@ -228,5 +229,170 @@ export class ContentEncryption {
     }
     
     return content.substring(0, maxLength) + '...\n\n🔒 [Pay 0.5 USDC to unlock full content]';
+  }
+
+  /**
+   * Encrypt Flash Thinking chain-of-thought parts
+   */
+  encryptThoughtParts(
+    thoughtParts: ThoughtPart[],
+    transactionSignature: string
+  ): EncryptedContent {
+    const serializedThoughts = JSON.stringify(thoughtParts);
+    return this.encrypt(serializedThoughts, transactionSignature);
+  }
+
+  /**
+   * Decrypt Flash Thinking chain-of-thought parts
+   */
+  decryptThoughtParts(
+    encryptedThoughts: EncryptedContent,
+    transactionSignature: string
+  ): ThoughtPart[] {
+    const decryptedData = this.decrypt(encryptedThoughts, transactionSignature);
+    try {
+      const thoughtParts = JSON.parse(decryptedData);
+      
+      // Validate the structure
+      if (!Array.isArray(thoughtParts)) {
+        throw new Error('Decrypted data is not an array');
+      }
+
+      // Validate each thought part
+      thoughtParts.forEach((part, index) => {
+        if (!this.isValidThoughtPart(part)) {
+          throw new Error(`Invalid thought part at index ${index}`);
+        }
+      });
+
+      return thoughtParts;
+    } catch (error) {
+      throw new Error(`Failed to parse decrypted thought parts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create blurred chain-of-thought preview for non-premium users
+   */
+  static createThoughtPartsPreview(thoughtParts: ThoughtPart[], visibleCount: number = 2): string {
+    if (thoughtParts.length === 0) {
+      return '🔒 [Premium chain-of-thought analysis available - Pay 0.5 USDC to unlock]';
+    }
+
+    const visibleThoughts = thoughtParts.slice(0, visibleCount);
+    const hiddenCount = Math.max(0, thoughtParts.length - visibleCount);
+
+    let preview = '💭 **Thinking Process Preview:**\n\n';
+    
+    visibleThoughts.forEach((thought, index) => {
+      const blurredText = this.createBlurredContent(thought.text, 0.3);
+      preview += `${index + 1}. ${blurredText}\n\n`;
+    });
+
+    if (hiddenCount > 0) {
+      preview += `... and ${hiddenCount} more reasoning step${hiddenCount > 1 ? 's' : ''}\n\n`;
+    }
+
+    preview += '🔒 [Pay 0.5 USDC to unlock complete chain-of-thought analysis]';
+    
+    return preview;
+  }
+
+  /**
+   * Generate teaser summary from chain-of-thought for public users
+   */
+  static generateThoughtSummary(thoughtParts: ThoughtPart[]): string {
+    if (thoughtParts.length === 0) {
+      return 'Advanced reasoning analysis available for premium users.';
+    }
+
+    const totalSteps = thoughtParts.length;
+    const avgLength = thoughtParts.reduce((sum, part) => sum + part.text.length, 0) / totalSteps;
+    
+    // Extract key themes from first few thoughts (without revealing content)
+    const themes = ['market analysis', 'risk assessment', 'technical indicators', 'sentiment analysis'];
+    const selectedThemes = themes.slice(0, Math.min(3, totalSteps));
+
+    return `🧠 **AI Reasoning Summary:** ${totalSteps} analytical steps covering ${selectedThemes.join(', ')} (avg. ${Math.round(avgLength)} chars per step). Unlock full reasoning chain for detailed insights.`;
+  }
+
+  /**
+   * Validate ThoughtPart structure
+   */
+  private isValidThoughtPart(part: any): part is ThoughtPart {
+    return (
+      typeof part === 'object' &&
+      typeof part.text === 'string' &&
+      typeof part.thought === 'boolean' &&
+      typeof part.order === 'number' &&
+      typeof part.timestamp === 'number' &&
+      (part.tokenCount === undefined || typeof part.tokenCount === 'number')
+    );
+  }
+
+  /**
+   * Encrypt complete analysis response including chain-of-thought
+   */
+  encryptAnalysisResponse(
+    response: {
+      finalAnswer: string;
+      chainOfThought: ThoughtPart[];
+      marketAnalysis?: string;
+      riskAssessment?: string;
+    },
+    transactionSignature: string
+  ): {
+    finalAnswer: EncryptedContent;
+    chainOfThought: EncryptedContent;
+    marketAnalysis?: EncryptedContent;
+    riskAssessment?: EncryptedContent;
+  } {
+    const result: any = {
+      finalAnswer: this.encrypt(response.finalAnswer, transactionSignature),
+      chainOfThought: this.encryptThoughtParts(response.chainOfThought, transactionSignature)
+    };
+
+    if (response.marketAnalysis) {
+      result.marketAnalysis = this.encrypt(response.marketAnalysis, transactionSignature);
+    }
+
+    if (response.riskAssessment) {
+      result.riskAssessment = this.encrypt(response.riskAssessment, transactionSignature);
+    }
+
+    return result;
+  }
+
+  /**
+   * Decrypt complete analysis response including chain-of-thought
+   */
+  decryptAnalysisResponse(
+    encryptedResponse: {
+      finalAnswer: EncryptedContent;
+      chainOfThought: EncryptedContent;
+      marketAnalysis?: EncryptedContent;
+      riskAssessment?: EncryptedContent;
+    },
+    transactionSignature: string
+  ): {
+    finalAnswer: string;
+    chainOfThought: ThoughtPart[];
+    marketAnalysis?: string;
+    riskAssessment?: string;
+  } {
+    const result: any = {
+      finalAnswer: this.decrypt(encryptedResponse.finalAnswer, transactionSignature),
+      chainOfThought: this.decryptThoughtParts(encryptedResponse.chainOfThought, transactionSignature)
+    };
+
+    if (encryptedResponse.marketAnalysis) {
+      result.marketAnalysis = this.decrypt(encryptedResponse.marketAnalysis, transactionSignature);
+    }
+
+    if (encryptedResponse.riskAssessment) {
+      result.riskAssessment = this.decrypt(encryptedResponse.riskAssessment, transactionSignature);
+    }
+
+    return result;
   }
 }

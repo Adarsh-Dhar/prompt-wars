@@ -3,6 +3,7 @@
  */
 
 import { Connection, PublicKey, ParsedTransactionWithMeta } from '@solana/web3.js';
+import { ThoughtPart } from '../types';
 
 export interface PaymentVerificationRequest {
   transactionSignature: string;
@@ -10,6 +11,20 @@ export interface PaymentVerificationRequest {
   expectedRecipient: string;
   contentId: string;
   senderAddress: string;
+}
+
+export interface ChainOfThoughtAccessRequest {
+  transactionSignature: string;
+  analysisId: string;
+  senderAddress: string;
+  contentType: 'chain-of-thought' | 'premium-analysis' | 'full-access';
+}
+
+export interface AccessControlResult {
+  hasAccess: boolean;
+  accessLevel: 'public' | 'premium' | 'full';
+  error?: string;
+  paymentDetails?: PaymentVerificationResult;
 }
 
 export interface PaymentVerificationResult {
@@ -310,11 +325,208 @@ export class PaymentVerificationService {
    */
   async estimateTransactionFee(): Promise<number> {
     try {
-      const recentBlockhash = await this.connection.getLatestBlockhash();
       // Typical USDC transfer fee is around 0.000005 SOL
       return 0.000005;
     } catch {
       return 0.000005; // Default estimate
     }
+  }
+
+  /**
+   * Verify access to chain-of-thought content
+   */
+  async verifyChainOfThoughtAccess(request: ChainOfThoughtAccessRequest): Promise<AccessControlResult> {
+    try {
+      // Define pricing tiers
+      const pricingTiers = {
+        'chain-of-thought': 0.5, // 0.5 USDC for chain-of-thought access
+        'premium-analysis': 0.3, // 0.3 USDC for premium analysis
+        'full-access': 1.0 // 1.0 USDC for full access
+      };
+
+      const requiredAmount = pricingTiers[request.contentType];
+      const serverWallet = process.env.SERVER_WALLET || 'DEFAULT_WALLET_ADDRESS';
+
+      // Verify payment
+      const paymentRequest: PaymentVerificationRequest = {
+        transactionSignature: request.transactionSignature,
+        expectedAmount: requiredAmount,
+        expectedRecipient: serverWallet,
+        contentId: request.analysisId,
+        senderAddress: request.senderAddress
+      };
+
+      const paymentResult = await this.verifyPaymentDetailed(paymentRequest);
+
+      if (!paymentResult.isValid) {
+        return {
+          hasAccess: false,
+          accessLevel: 'public',
+          error: paymentResult.error,
+          paymentDetails: paymentResult
+        };
+      }
+
+      // Determine access level based on payment amount
+      let accessLevel: 'public' | 'premium' | 'full' = 'public';
+      
+      if (paymentResult.amount! >= pricingTiers['full-access']) {
+        accessLevel = 'full';
+      } else if (paymentResult.amount! >= pricingTiers['chain-of-thought']) {
+        accessLevel = 'premium';
+      }
+
+      return {
+        hasAccess: true,
+        accessLevel,
+        paymentDetails: paymentResult
+      };
+
+    } catch (error) {
+      console.error('Chain-of-thought access verification error:', error);
+      return {
+        hasAccess: false,
+        accessLevel: 'public',
+        error: `Access verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  /**
+   * Generate HTTP 402 Payment Required response for chain-of-thought content
+   */
+  generatePaymentRequiredResponse(contentType: 'chain-of-thought' | 'premium-analysis' | 'full-access', analysisId?: string) {
+    const pricingTiers = {
+      'chain-of-thought': { price: 0.5, description: 'Chain-of-Thought reasoning access' },
+      'premium-analysis': { price: 0.3, description: 'Premium analysis content' },
+      'full-access': { price: 1.0, description: 'Full analysis with chain-of-thought' }
+    };
+
+    const tier = pricingTiers[contentType];
+    const serverWallet = process.env.SERVER_WALLET || 'DEFAULT_WALLET_ADDRESS';
+
+    return {
+      error: 'Payment Required',
+      message: `${tier.description} requires payment verification`,
+      price: tier.price,
+      currency: 'USDC',
+      recipient: serverWallet,
+      memo: `${contentType}-access${analysisId ? `-${analysisId}` : ''}`,
+      instructions: {
+        step1: `Send ${tier.price} USDC to ${serverWallet}`,
+        step2: 'Include the transaction signature in your request header: Authorization: Signature <tx_signature>',
+        step3: 'Retry your request with the payment signature'
+      },
+      teaser: this.generateContentTeaser(contentType)
+    };
+  }
+
+  /**
+   * Generate content teaser for payment conversion
+   */
+  private generateContentTeaser(contentType: string): string {
+    const teasers = {
+      'chain-of-thought': '🧠 **Reasoning Preview:** Advanced AI analysis reveals step-by-step market reasoning, risk assessment patterns, and decision logic. Unlock complete thought process for deeper insights.',
+      'premium-analysis': '📊 **Premium Preview:** Detailed market analysis with advanced indicators, sentiment analysis, and risk metrics. Full analysis includes price targets and confidence intervals.',
+      'full-access': '🚀 **Complete Preview:** Full AI reasoning + premium analysis + real-time insights. Get the complete picture with thought process, analysis, and actionable recommendations.'
+    };
+
+    return teasers[contentType] || 'Premium content available with payment verification.';
+  }
+
+  /**
+   * Log access attempts for audit purposes
+   */
+  async logAccessAttempt(
+    request: ChainOfThoughtAccessRequest, 
+    result: AccessControlResult, 
+    userAgent?: string,
+    ipAddress?: string
+  ): Promise<void> {
+    try {
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        analysisId: request.analysisId,
+        contentType: request.contentType,
+        senderAddress: request.senderAddress,
+        transactionSignature: request.transactionSignature,
+        accessGranted: result.hasAccess,
+        accessLevel: result.accessLevel,
+        paymentAmount: result.paymentDetails?.amount,
+        error: result.error,
+        userAgent: userAgent || 'unknown',
+        ipAddress: ipAddress || 'unknown'
+      };
+
+      // Log to console (in production, this would go to a proper logging service)
+      console.log('Chain-of-Thought Access Attempt:', JSON.stringify(logEntry));
+
+      // TODO: Send to monitoring/audit system (e.g., DataDog, CloudWatch, etc.)
+      // await this.sendToAuditSystem(logEntry);
+
+    } catch (error) {
+      console.error('Failed to log access attempt:', error);
+      // Don't throw - logging failures shouldn't break the main flow
+    }
+  }
+
+  /**
+   * Check if transaction signature has been used before (prevent replay attacks)
+   */
+  private transactionCache = new Map<string, { timestamp: number; used: boolean }>();
+
+  async checkTransactionReuse(signature: string): Promise<boolean> {
+    // Check in-memory cache first
+    const cached = this.transactionCache.get(signature);
+    if (cached && cached.used) {
+      return true; // Transaction already used
+    }
+
+    // In production, this would check a persistent database
+    // For now, mark as used in memory cache
+    this.transactionCache.set(signature, {
+      timestamp: Date.now(),
+      used: true
+    });
+
+    // Clean up old entries (older than 24 hours)
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    for (const [key, value] of this.transactionCache.entries()) {
+      if (value.timestamp < oneDayAgo) {
+        this.transactionCache.delete(key);
+      }
+    }
+
+    return false; // Transaction not previously used
+  }
+
+  /**
+   * Validate content access permissions
+   */
+  async validateContentAccess(
+    signature: string,
+    contentType: 'chain-of-thought' | 'premium-analysis' | 'full-access',
+    analysisId: string,
+    senderAddress: string
+  ): Promise<AccessControlResult> {
+    // Check for transaction reuse
+    const isReused = await this.checkTransactionReuse(signature);
+    if (isReused) {
+      return {
+        hasAccess: false,
+        accessLevel: 'public',
+        error: 'Transaction signature has already been used'
+      };
+    }
+
+    // Verify access
+    const accessRequest: ChainOfThoughtAccessRequest = {
+      transactionSignature: signature,
+      analysisId,
+      senderAddress,
+      contentType
+    };
+
+    return await this.verifyChainOfThoughtAccess(accessRequest);
   }
 }

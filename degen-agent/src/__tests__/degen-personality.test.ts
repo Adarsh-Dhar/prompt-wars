@@ -22,7 +22,7 @@ describe('Degen Personality Consistency Property Tests', () => {
     decision: fc.constantFrom('LONG', 'SHORT'),
     confidence: fc.integer({ min: 0, max: 100 }),
     timestamp: fc.date(),
-    currentPrice: fc.float({ min: 0.000001, max: 1000000 }),
+    currentPrice: fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) }),
     chainOfThought: fc.option(fc.string({ minLength: 10 })),
     isUnlocked: fc.boolean(),
     marketId: fc.option(fc.uuid())
@@ -30,10 +30,10 @@ describe('Degen Personality Consistency Property Tests', () => {
 
   const tokenMetricsGenerator = fc.record({
     symbol: fc.string({ minLength: 1, maxLength: 10 }).filter(s => /^[A-Z]+$/.test(s)),
-    price: fc.float({ min: 0.000001, max: 1000000 }),
-    volume24h: fc.option(fc.float({ min: 0, max: 1000000000 })),
-    marketCap: fc.option(fc.float({ min: 1000, max: 1000000000000 })),
-    priceChange24h: fc.option(fc.float({ min: -99, max: 1000 })),
+    price: fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) }),
+    volume24h: fc.option(fc.float({ min: Math.fround(0), max: Math.fround(1000000000) })),
+    marketCap: fc.option(fc.float({ min: Math.fround(1000), max: Math.fround(1000000000000) })),
+    priceChange24h: fc.option(fc.float({ min: Math.fround(-99), max: Math.fround(1000) })),
     socialSentiment: fc.option(fc.constantFrom('BULLISH', 'BEARISH', 'NEUTRAL')),
     hypeScore: fc.option(fc.integer({ min: 1, max: 100 })),
     liquidityScore: fc.option(fc.integer({ min: 1, max: 100 })),
@@ -132,7 +132,7 @@ describe('Degen Personality Consistency Property Tests', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 10 }).filter(s => /^[A-Z]+$/.test(s)),
-        fc.float({ min: 0.000001, max: 1000000 }),
+        fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) }),
         (tokenSymbol: string, currentPrice: number) => {
           const prompt = generateDegenPrompt(tokenSymbol, currentPrice);
           const lowerPrompt = prompt.toLowerCase();

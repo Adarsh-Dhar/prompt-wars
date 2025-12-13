@@ -8,10 +8,38 @@ export interface DegenPersonalityConfig {
   slangIntensity: number; // 1-10 scale
 }
 
+export interface FlashThinkingConfig {
+  enabled: boolean;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  maxThoughtTokens: number;
+}
+
+export interface DegenBrainConfig {
+  personality: DegenPersonalityConfig;
+  flashThinking: FlashThinkingConfig;
+  useGemini: boolean;
+}
+
 export const DEFAULT_DEGEN_PERSONALITY: DegenPersonalityConfig = {
   riskTolerance: 'EXTREME',
   tradingStyle: 'HYPE_DRIVEN',
   slangIntensity: 9
+};
+
+export const DEFAULT_FLASH_THINKING_CONFIG: FlashThinkingConfig = {
+  enabled: process.env.GEMINI_ENABLE_THOUGHTS === 'true',
+  model: process.env.GEMINI_FLASH_MODEL || 'gemini-2.0-flash-thinking-exp-01-21',
+  temperature: parseFloat(process.env.GEMINI_THOUGHTS_TEMPERATURE || '1.0'),
+  maxTokens: parseInt(process.env.COST_CONTROL_MAX_TOKENS || '4000'),
+  maxThoughtTokens: parseInt(process.env.COST_CONTROL_MAX_THOUGHT_TOKENS || '2000')
+};
+
+export const DEFAULT_DEGEN_BRAIN_CONFIG: DegenBrainConfig = {
+  personality: DEFAULT_DEGEN_PERSONALITY,
+  flashThinking: DEFAULT_FLASH_THINKING_CONFIG,
+  useGemini: process.env.GEMINI_ENABLE_THOUGHTS === 'true'
 };
 
 export const DEGEN_SYSTEM_PROMPT = `
@@ -112,4 +140,137 @@ Market Data Available: ${marketData ? JSON.stringify(marketData) : 'Limited data
 
 Remember: This is pure degen speculation, not financial advice. Let's see those diamond hands! 💎🙌
 `;
+}
+
+/**
+ * Generate Flash Thinking optimized prompt for Gemini
+ */
+export function generateFlashThinkingPrompt(
+  tokenSymbol: string,
+  currentPrice: number,
+  marketData?: any,
+  personality: DegenPersonalityConfig = DEFAULT_DEGEN_PERSONALITY
+): string {
+  const basePrompt = generateDegenPrompt(tokenSymbol, currentPrice, marketData, personality);
+  
+  return `${basePrompt}
+
+FLASH THINKING INSTRUCTIONS:
+- Think step-by-step through your analysis process
+- Show your reasoning for each factor you consider
+- Explain how you weigh different signals (hype, momentum, technicals)
+- Walk through your decision-making process
+- Consider multiple scenarios and their probabilities
+- Be transparent about your confidence levels and uncertainty
+
+Your thoughts will be captured separately from your final answer, so feel free to explore different angles and show your complete reasoning process.`;
+}
+
+/**
+ * Get configuration based on environment variables
+ */
+export function getDegenBrainConfig(): DegenBrainConfig {
+  return {
+    personality: DEFAULT_DEGEN_PERSONALITY,
+    flashThinking: {
+      enabled: process.env.GEMINI_ENABLE_THOUGHTS === 'true',
+      model: process.env.GEMINI_FLASH_MODEL || 'gemini-2.0-flash-thinking-exp-01-21',
+      temperature: parseFloat(process.env.GEMINI_THOUGHTS_TEMPERATURE || '1.0'),
+      maxTokens: parseInt(process.env.COST_CONTROL_MAX_TOKENS || '4000'),
+      maxThoughtTokens: parseInt(process.env.COST_CONTROL_MAX_THOUGHT_TOKENS || '2000')
+    },
+    useGemini: process.env.GEMINI_ENABLE_THOUGHTS === 'true'
+  };
+}
+
+/**
+ * Check if Flash Thinking is enabled
+ */
+export function isFlashThinkingEnabled(): boolean {
+  return process.env.GEMINI_ENABLE_THOUGHTS === 'true';
+}
+
+/**
+ * Get the appropriate model configuration
+ */
+export function getModelConfig(): { useGemini: boolean; config: any } {
+  const brainConfig = getDegenBrainConfig();
+  
+  if (brainConfig.useGemini && brainConfig.flashThinking.enabled) {
+    return {
+      useGemini: true,
+      config: {
+        apiKey: process.env.GEMINI_API_KEY,
+        model: brainConfig.flashThinking.model,
+        temperature: brainConfig.flashThinking.temperature,
+        maxTokens: brainConfig.flashThinking.maxTokens,
+        enableThoughts: true
+      }
+    };
+  }
+  
+  // Fallback to OpenAI
+  return {
+    useGemini: false,
+    config: {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || 'gpt-4',
+      temperature: 0.8,
+      maxTokens: 1000
+    }
+  };
+}
+
+/**
+ * Validate environment configuration
+ */
+export function validateConfiguration(): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const config = getDegenBrainConfig();
+  
+  if (config.useGemini) {
+    if (!process.env.GEMINI_API_KEY) {
+      errors.push('GEMINI_API_KEY is required when Flash Thinking is enabled');
+    }
+    
+    if (config.flashThinking.temperature < 0 || config.flashThinking.temperature > 2) {
+      errors.push('GEMINI_THOUGHTS_TEMPERATURE must be between 0 and 2');
+    }
+    
+    if (config.flashThinking.maxTokens <= 0) {
+      errors.push('COST_CONTROL_MAX_TOKENS must be positive');
+    }
+    
+    if (config.flashThinking.maxThoughtTokens <= 0) {
+      errors.push('COST_CONTROL_MAX_THOUGHT_TOKENS must be positive');
+    }
+  } else {
+    if (!process.env.OPENAI_API_KEY) {
+      errors.push('OPENAI_API_KEY is required when Flash Thinking is disabled');
+    }
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Log configuration for debugging
+ */
+export function logConfiguration(): void {
+  const config = getDegenBrainConfig();
+  const validation = validateConfiguration();
+  
+  console.log('Degen Brain Configuration:', {
+    useGemini: config.useGemini,
+    flashThinkingEnabled: config.flashThinking.enabled,
+    model: config.flashThinking.model,
+    temperature: config.flashThinking.temperature,
+    maxTokens: config.flashThinking.maxTokens,
+    maxThoughtTokens: config.flashThinking.maxThoughtTokens,
+    isValid: validation.isValid,
+    errors: validation.errors
+  });
 }

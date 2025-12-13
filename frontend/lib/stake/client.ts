@@ -181,7 +181,7 @@ export async function initializeRegistry(params: {
   console.log("=".repeat(80))
 
   const registry = getRegistryPda()
-  const defaultBond = bondLamports || anchor.web3.LAMPORTS_PER_SOL / 20 // 0.05 SOL in lamports
+  const defaultBond = bondLamports || (0.05 * anchor.web3.LAMPORTS_PER_SOL) // 0.05 SOL in lamports
   const defaultSlash = slashPenaltyLamports ?? defaultBond // default to full bond slashable
 
   try {
@@ -229,6 +229,27 @@ export async function initializeRegistry(params: {
 /**
  * Fetch proof request account from contract
  */
+/**
+ * Fetch agent account data
+ */
+export async function fetchAgent(params: {
+  connection: anchor.web3.Connection
+  agentWallet: anchor.web3.PublicKey
+}) {
+  const { connection, agentWallet } = params
+  const program = getProgram(connection)
+
+  const agent = getAgentPda(agentWallet)
+
+  try {
+    const account = await (program.account as any).agent.fetchNullable(agent)
+    return account
+  } catch (error) {
+    console.error("Error fetching agent:", error)
+    return null
+  }
+}
+
 export async function fetchProofRequest(params: {
   connection: anchor.web3.Connection
   agentWallet: anchor.web3.PublicKey
@@ -322,6 +343,22 @@ export async function registerAgent(params: {
   const agent = getAgentPda(wallet.publicKey)
   const vault = getVaultPda(agent)
 
+  // Check if agent already exists
+  console.log("Checking if agent already exists...")
+  try {
+    const existingAgent = await connection.getAccountInfo(agent)
+    if (existingAgent) {
+      throw new Error(`Agent already registered for this wallet. Agent PDA: ${agent.toBase58()}. Use a different wallet or withdraw the existing bond first.`)
+    }
+    console.log("Agent account is available")
+  } catch (checkError: any) {
+    if (checkError.message.includes("already registered")) {
+      throw checkError // Re-throw our custom error
+    }
+    // Other errors (like network issues) can be ignored
+    console.log("Agent existence check failed (this might be normal):", checkError.message)
+  }
+
   console.log("Calling program.methods.registerAgent with:", { name, url, tags })
   console.log("Program methods available:", Object.keys(program.methods))
   
@@ -401,9 +438,44 @@ export async function registerAgent(params: {
 
   // Now execute the transaction
   console.log("Executing transaction...")
-  const sig = await methodWithAccounts.rpc()
-
-  return { signature: sig, agentPda: agent }
+  
+  try {
+    // Try to build and send the transaction manually for better error handling
+    const transaction = await methodWithAccounts.transaction()
+    console.log("Transaction built successfully")
+    
+    // Get recent blockhash
+    const { blockhash } = await connection.getLatestBlockhash()
+    transaction.recentBlockhash = blockhash
+    transaction.feePayer = wallet.publicKey
+    
+    console.log("Transaction details:", {
+      feePayer: transaction.feePayer?.toBase58(),
+      recentBlockhash: transaction.recentBlockhash,
+      instructions: transaction.instructions.length,
+      signatures: transaction.signatures.length
+    })
+    
+    // Sign and send transaction
+    const signedTx = await wallet.signTransaction!(transaction)
+    console.log("Transaction signed successfully")
+    
+    const sig = await connection.sendRawTransaction(signedTx.serialize())
+    console.log("Transaction sent, signature:", sig)
+    
+    // Confirm transaction
+    await connection.confirmTransaction(sig, "confirmed")
+    console.log("Transaction confirmed")
+    
+    return { signature: sig, agentPda: agent }
+  } catch (txError: any) {
+    console.error("Transaction execution failed:", txError)
+    
+    // If manual transaction fails, fall back to RPC method
+    console.log("Falling back to RPC method...")
+    const sig = await methodWithAccounts.rpc()
+    return { signature: sig, agentPda: agent }
+  }
 }
 
 /**
@@ -459,6 +531,36 @@ export async function requestProof(params: {
 /**
  * Submit proof to the contract
  */
+/**
+ * Withdraw bond from an existing agent (allows re-registration)
+ */
+export async function withdrawBond(params: {
+  connection: anchor.web3.Connection
+  wallet: Wallet
+}) {
+  const { connection, wallet } = params
+  const program = getProgram(connection, wallet)
+
+  if (!("publicKey" in wallet) || !wallet.publicKey) {
+    throw new Error("Wallet not connected")
+  }
+
+  const agent = getAgentPda(wallet.publicKey)
+  const vault = getVaultPda(agent)
+
+  const sig = await program.methods
+    .withdrawBond()
+    .accounts({
+      agent,
+      vault,
+      authority: wallet.publicKey,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    })
+    .rpc()
+
+  return { signature: sig }
+}
+
 export async function submitProof(params: {
   connection: anchor.web3.Connection
   wallet: Wallet

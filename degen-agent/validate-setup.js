@@ -100,10 +100,16 @@ if (fs.existsSync(envExamplePath)) {
   
   const requiredEnvVars = [
     'GEMINI_API_KEY',
+    'GEMINI_FLASH_MODEL', 
+    'GEMINI_ENABLE_THOUGHTS',
+    'GEMINI_THOUGHTS_TEMPERATURE',
+    'COST_CONTROL_MAX_TOKENS',
+    'COST_CONTROL_MAX_THOUGHT_TOKENS',
     'RPC_URL',
     'SOLANA_PRIVATE_KEY',
     'SERVER_WALLET',
     'FRONTEND_URL',
+    'AGENT_SERVER_URL',
     'PORT'
   ];
   
@@ -119,6 +125,95 @@ if (fs.existsSync(envExamplePath)) {
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   success('.env file exists');
+  
+  // Validate Gemini Flash Thinking configuration
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  
+  // Check API key format
+  const apiKeyMatch = envContent.match(/GEMINI_API_KEY=(.+)/);
+  if (apiKeyMatch && apiKeyMatch[1] && apiKeyMatch[1] !== 'your_gemini_api_key_here') {
+    const apiKey = apiKeyMatch[1].replace(/"/g, '');
+    if (apiKey.startsWith('AIza') && apiKey.length > 30) {
+      success('Gemini API key appears to be properly formatted');
+    } else {
+      warning('Gemini API key format may be incorrect (should start with "AIza")');
+    }
+  } else {
+    warning('Gemini API key not configured - update from .env.example');
+  }
+  
+  if (envContent.includes('GEMINI_ENABLE_THOUGHTS=true')) {
+    success('Gemini Flash Thinking is enabled');
+    
+    // Validate model configuration
+    const modelMatch = envContent.match(/GEMINI_FLASH_MODEL=(.+)/);
+    if (modelMatch && modelMatch[1]) {
+      const model = modelMatch[1].replace(/"/g, '');
+      if (model.includes('gemini-2.0-flash-thinking')) {
+        success('Gemini Flash Thinking model is properly configured');
+      } else if (model.includes('thinking')) {
+        success('Thinking-capable model is configured');
+      } else {
+        warning('Model may not support Flash Thinking - use gemini-2.0-flash-thinking-exp-01-21');
+      }
+    } else {
+      error('GEMINI_FLASH_MODEL is required when Flash Thinking is enabled');
+    }
+    
+    // Validate temperature setting
+    const tempMatch = envContent.match(/GEMINI_THOUGHTS_TEMPERATURE=(.+)/);
+    if (tempMatch && tempMatch[1]) {
+      const temp = parseFloat(tempMatch[1]);
+      if (temp >= 0.0 && temp <= 2.0) {
+        success(`Temperature is set to ${temp} (valid range)`);
+      } else {
+        warning(`Temperature ${temp} is outside recommended range (0.0-2.0)`);
+      }
+    } else {
+      warning('GEMINI_THOUGHTS_TEMPERATURE should be set (recommended: 1.0)');
+    }
+    
+    // Validate cost control
+    const maxTokensMatch = envContent.match(/COST_CONTROL_MAX_TOKENS=(.+)/);
+    const maxThoughtTokensMatch = envContent.match(/COST_CONTROL_MAX_THOUGHT_TOKENS=(.+)/);
+    
+    if (maxTokensMatch && maxThoughtTokensMatch) {
+      const maxTokens = parseInt(maxTokensMatch[1]);
+      const maxThoughtTokens = parseInt(maxThoughtTokensMatch[1]);
+      
+      if (maxTokens > 0 && maxThoughtTokens > 0) {
+        success('Cost control limits are configured');
+        
+        if (maxThoughtTokens <= maxTokens) {
+          success('Token limits are properly configured');
+        } else {
+          warning('COST_CONTROL_MAX_THOUGHT_TOKENS should not exceed COST_CONTROL_MAX_TOKENS');
+        }
+        
+        if (maxTokens > 8000) {
+          warning('High token limit detected - monitor costs carefully');
+        }
+      } else {
+        error('Cost control limits must be positive integers');
+      }
+    } else {
+      warning('Cost control variables should be set to manage token usage');
+    }
+    
+  } else if (envContent.includes('GEMINI_ENABLE_THOUGHTS=false')) {
+    info('Gemini Flash Thinking is disabled - using standard generation');
+    info('To enable Flash Thinking, set GEMINI_ENABLE_THOUGHTS=true');
+  } else {
+    warning('GEMINI_ENABLE_THOUGHTS should be explicitly set to true or false');
+  }
+  
+  // Check server URL configuration
+  if (envContent.includes('AGENT_SERVER_URL')) {
+    success('Agent server URL is configured');
+  } else {
+    warning('AGENT_SERVER_URL should be set for proper frontend integration');
+  }
+  
   info('Remember to configure your actual API keys and wallet addresses');
 } else {
   warning('.env file not found - copy from .env.example and configure');
@@ -305,13 +400,48 @@ if (hasErrors) {
   console.log('✅ Setup looks good! Ready to run the degen agent');
 }
 
+// Test Gemini API connectivity (optional)
+console.log('\n🌐 Testing Gemini API connectivity...');
+if (fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const apiKeyMatch = envContent.match(/GEMINI_API_KEY=(.+)/);
+    
+    if (apiKeyMatch && apiKeyMatch[1] && !apiKeyMatch[1].includes('your_gemini_api_key_here')) {
+      info('Gemini API key found - connectivity test available');
+      info('Run "node -e "import(\'./startup.js\').then(m => m.initializeAgentIntegration())"" to test connectivity');
+    } else {
+      info('Configure GEMINI_API_KEY in .env to test connectivity');
+    }
+  } catch (err) {
+    info('Configure .env file to enable connectivity testing');
+  }
+} else {
+  info('Create .env file to enable connectivity testing');
+}
+
 console.log('\n🚀 Next steps:');
 console.log('1. Copy .env.example to .env and configure your API keys');
-console.log('2. Install dependencies: pnpm install');
-console.log('3. Start the agent: pnpm run agent');
-console.log('4. Check integration: pnpm test');
+console.log('2. Configure Gemini Flash Thinking settings in .env:');
+console.log('   - GEMINI_API_KEY: Get from https://aistudio.google.com/app/apikey');
+console.log('   - GEMINI_ENABLE_THOUGHTS: Set to true for Flash Thinking');
+console.log('   - GEMINI_FLASH_MODEL: Use gemini-2.0-flash-thinking-exp-01-21');
+console.log('3. Install dependencies: pnpm install');
+console.log('4. Test connectivity: node startup.js');
+console.log('5. Start the agent: pnpm run agent');
+console.log('6. Test Flash Thinking: curl -X POST http://localhost:4001/api/analyze -d \'{"tokenSymbol":"BTC"}\'');
+console.log('7. Test streaming: curl -N http://localhost:4001/stream/analyze?token=BTC');
+console.log('8. Check integration: pnpm test');
 
 console.log('\n📚 Documentation:');
 console.log('- README.md - Setup and usage guide');
-console.log('- DEPLOYMENT.md - Production deployment guide');
-console.log('- .env.example - Environment configuration template');
+console.log('- DEPLOYMENT.md - Production deployment guide with Flash Thinking rollout procedures');
+console.log('- .env.example - Environment configuration template with Gemini settings');
+console.log('- validate-setup.js - This validation script');
+
+console.log('\n🧠 Flash Thinking Features:');
+console.log('- Chain-of-thought reasoning with step-by-step analysis');
+console.log('- Real-time streaming of thinking process');
+console.log('- Premium content with payment-gated access');
+console.log('- Cost control with configurable token limits');
+console.log('- Feature flag for instant enable/disable');

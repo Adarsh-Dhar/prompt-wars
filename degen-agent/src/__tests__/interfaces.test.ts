@@ -16,7 +16,7 @@ describe('Interface Validation Property Tests', () => {
     decision: fc.constantFrom('LONG', 'SHORT'),
     confidence: fc.integer({ min: 0, max: 100 }),
     timestamp: fc.date(),
-    currentPrice: fc.float({ min: 0.000001, max: 1000000 }),
+    currentPrice: fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) }),
     chainOfThought: fc.option(fc.string({ minLength: 10 })),
     isUnlocked: fc.boolean(),
     marketId: fc.option(fc.uuid())
@@ -29,17 +29,17 @@ describe('Interface Validation Property Tests', () => {
     riskAssessment: fc.string({ minLength: 10 }),
     degenCommentary: fc.string({ minLength: 10 }),
     priceTargets: fc.record({
-      bullish: fc.float({ min: 0.000001, max: 1000000 }),
-      bearish: fc.float({ min: 0.000001, max: 1000000 })
+      bullish: fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) }),
+      bearish: fc.float({ min: Math.fround(0.000001), max: Math.fround(1000000) })
     })
   });
 
   const predictionMarketGenerator = fc.record({
     id: fc.uuid(),
     decisionId: fc.uuid(),
-    totalPool: fc.float({ min: 0, max: 1000000 }),
-    winBets: fc.float({ min: 0, max: 1000000 }),
-    lossBets: fc.float({ min: 0, max: 1000000 }),
+    totalPool: fc.float({ min: Math.fround(0), max: Math.fround(1000000) }),
+    winBets: fc.float({ min: Math.fround(0), max: Math.fround(1000000) }),
+    lossBets: fc.float({ min: Math.fround(0), max: Math.fround(1000000) }),
     resolutionTime: fc.date(),
     isResolved: fc.boolean(),
     outcome: fc.option(fc.constantFrom('WIN', 'LOSS'))
@@ -50,10 +50,10 @@ describe('Interface Validation Property Tests', () => {
     userId: fc.uuid(),
     marketId: fc.uuid(),
     prediction: fc.constantFrom('WIN', 'LOSS'),
-    amount: fc.float({ min: 0.01, max: 1000000 }),
+    amount: fc.float({ min: Math.fround(0.01), max: Math.fround(1000000) }),
     timestamp: fc.date(),
     isWinning: fc.option(fc.boolean()),
-    payout: fc.option(fc.float({ min: 0, max: 1000000 }))
+    payout: fc.option(fc.float({ min: Math.fround(0), max: Math.fround(1000000) }))
   });
 
   const degenAgentGenerator = fc.record({
@@ -65,14 +65,14 @@ describe('Interface Validation Property Tests', () => {
     performance: fc.record({
       totalPredictions: fc.integer({ min: 0, max: 10000 }),
       correctPredictions: fc.integer({ min: 0, max: 10000 }),
-      averageReturn: fc.float({ min: -100, max: 1000 }),
+      averageReturn: fc.float({ min: Math.fround(-100), max: Math.fround(1000) }),
       winStreak: fc.integer({ min: 0, max: 100 })
     })
   });
 
   const paymentVerificationGenerator = fc.record({
     transactionSignature: fc.string({ minLength: 64, maxLength: 88 }),
-    amount: fc.float({ min: 0.01, max: 1000000 }),
+    amount: fc.float({ min: Math.fround(0.01), max: Math.fround(1000000) }),
     sender: fc.string({ minLength: 32, maxLength: 44 }),
     recipient: fc.string({ minLength: 32, maxLength: 44 }),
     timestamp: fc.date(),

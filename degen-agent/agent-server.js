@@ -1,11 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as anchor from '@coral-xyz/anchor';
 import crypto from 'crypto';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { simulateTrade } from './sim/trading-simulator.js';
+import { GoogleGenAIClient } from './src/lib/google-gen-client.ts';
+import { getModelConfig, isFlashThinkingEnabled } from './src/lib/degen_brain.ts';
+import FrontendIntegration from './src/lib/frontend-integration.ts';
 
 dotenv.config();
 
@@ -16,6 +21,15 @@ if (!process.env.GEMINI_API_KEY) {
 
 // --- CONFIGURATION ---
 const app = express();
+const server = createServer(app);
+const wss = new WebSocketServer({ 
+    server,
+    path: '/ws'
+});
+const analyzeWss = new WebSocketServer({ 
+    server,
+    path: '/ws/analyze'
+});
 const PORT = process.env.PORT || 4001; // Different port from prompt-wars-agent
 
 // CORS configuration to allow frontend
@@ -75,6 +89,192 @@ let agentState = {
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Initialize Flash Thinking client if enabled
+let flashThinkingClient = null;
+if (isFlashThinkingEnabled()) {
+    try {
+        const modelConfig = getModelConfig();
+        if (modelConfig.useGemini) {
+            flashThinkingClient = new GoogleGenAIClient(modelConfig.config);
+            console.log('🧠 Flash Thinking enabled with Gemini 2.0');
+        }
+    } catch (error) {
+        console.warn('⚠️ Flash Thinking initialization failed:', error.message);
+    }
+}
+
+// Initialize Frontend Integration for public content generation
+let frontendIntegration = null;
+try {
+    frontendIntegration = new FrontendIntegration(agentKeypair, connection);
+    console.log('🔗 Frontend Integration initialized for public content generation');
+} catch (error) {
+    console.warn('⚠️ Frontend Integration initialization failed:', error.message);
+}
+
+// WebSocket connection management with backpressure handling
+const activeConnections = new Map(); // Use Map to track connection metadata
+const connectionBuffers = new Map(); // Buffer for backpressure management
+const MAX_BUFFER_SIZE = 100; // Maximum buffered messages per connection
+
+// Setup connection handler for general WebSocket endpoint (/ws)
+wss.on('connection', (ws, req) => {
+    setupWebSocketConnection(ws, req, '/ws');
+});
+
+// Setup connection handler for analysis WebSocket endpoint (/ws/analyze)
+analyzeWss.on('connection', (ws, req) => {
+    setupWebSocketConnection(ws, req, '/ws/analyze');
+});
+
+// Common WebSocket connection setup
+function setupWebSocketConnection(ws, req, endpoint) {
+    const connectionId = Date.now() + Math.random();
+    const url = req.url || endpoint;
+    
+    console.log(`🔌 New WebSocket connection established: ${endpoint}`);
+    
+    // Initialize connection tracking
+    activeConnections.set(ws, {
+        id: connectionId,
+        url: url,
+        endpoint: endpoint,
+        connectedAt: Date.now(),
+        messageCount: 0
+    });
+    connectionBuffers.set(ws, []);
+    
+    // Send welcome message
+    const welcomeMessage = {
+        type: 'connection',
+        data: {
+            message: `Connected to Degen Agent streaming`,
+            flashThinkingEnabled: !!flashThinkingClient,
+            timestamp: Date.now(),
+            connectionId: connectionId,
+            endpoint: endpoint
+        }
+    };
+    
+    sendToWebSocket(ws, welcomeMessage);
+    
+    ws.on('close', () => {
+        console.log(`🔌 WebSocket connection closed: ${connectionId} (${endpoint})`);
+        activeConnections.delete(ws);
+        connectionBuffers.delete(ws);
+    });
+    
+    ws.on('error', (error) => {
+        console.error(`WebSocket error on ${endpoint}:`, error);
+        activeConnections.delete(ws);
+        connectionBuffers.delete(ws);
+    });
+    
+    // Handle ping/pong for connection health
+    ws.on('pong', () => {
+        const connInfo = activeConnections.get(ws);
+        if (connInfo) {
+            connInfo.lastPong = Date.now();
+        }
+    });
+    
+    // Set up message handling
+    ws.on('message', async (message) => {
+        try {
+            const data = JSON.parse(message.toString());
+            
+            // Handle different message types based on endpoint
+            if (endpoint === '/ws/analyze') {
+                await handleAnalyzeWebSocketMessage(ws, data);
+            } else {
+                // Generic WebSocket handling for other endpoints
+                await handleGenericWebSocketMessage(ws, data);
+            }
+        } catch (error) {
+            console.error('WebSocket message error:', error);
+            sendToWebSocket(ws, {
+                type: 'error',
+                data: { error: 'Invalid message format' }
+            });
+        }
+    });
+}
+
+// Send message to specific WebSocket with backpressure handling
+function sendToWebSocket(ws, message) {
+    if (ws.readyState !== ws.OPEN) {
+        return false;
+    }
+    
+    const buffer = connectionBuffers.get(ws);
+    if (!buffer) {
+        return false;
+    }
+    
+    // Check buffer size for backpressure
+    if (buffer.length >= MAX_BUFFER_SIZE) {
+        console.warn('WebSocket buffer full, dropping oldest messages');
+        buffer.splice(0, buffer.length - MAX_BUFFER_SIZE + 1);
+    }
+    
+    try {
+        const messageStr = JSON.stringify(message);
+        ws.send(messageStr);
+        
+        // Update connection stats
+        const connInfo = activeConnections.get(ws);
+        if (connInfo) {
+            connInfo.messageCount++;
+            connInfo.lastMessageAt = Date.now();
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('WebSocket send error:', error);
+        activeConnections.delete(ws);
+        connectionBuffers.delete(ws);
+        return false;
+    }
+}
+
+// Broadcast to all connected WebSocket clients with backpressure handling
+function broadcastToWebSockets(message) {
+    let successCount = 0;
+    let failureCount = 0;
+    
+    activeConnections.forEach((connInfo, ws) => {
+        if (sendToWebSocket(ws, message)) {
+            successCount++;
+        } else {
+            failureCount++;
+        }
+    });
+    
+    if (failureCount > 0) {
+        console.warn(`WebSocket broadcast: ${successCount} success, ${failureCount} failures`);
+    }
+    
+    return { successCount, failureCount };
+}
+
+// Broadcast to specific endpoint connections
+function broadcastToEndpoint(endpoint, message) {
+    let successCount = 0;
+    let failureCount = 0;
+    
+    activeConnections.forEach((connInfo, ws) => {
+        if (connInfo.url === endpoint || connInfo.url.startsWith(endpoint)) {
+            if (sendToWebSocket(ws, message)) {
+                successCount++;
+            } else {
+                failureCount++;
+            }
+        }
+    });
+    
+    return { successCount, failureCount };
+}
 
 // System Instruction for the Degen Agent
 const systemInstruction = `
@@ -173,6 +373,160 @@ async function verifyPayment(signature, requiredAmount, expectedMemo = null) {
     }
 }
 
+// --- STREAMING ANALYSIS WITH FLASH THINKING ---
+async function generateStreamingAnalysis(tokenSymbol, currentPrice = null, streamingCallbacks = null) {
+    try {
+        agentState.status = "ANALYZING";
+        agentState.lastToken = tokenSymbol;
+        
+        addLog(`🔍 Analyzing ${tokenSymbol} with Flash Thinking...`, "public", { token: tokenSymbol });
+        
+        if (flashThinkingClient && streamingCallbacks) {
+            // Use Flash Thinking streaming
+            const prompt = `
+            Analyze the token ${tokenSymbol} ${currentPrice ? `at current price ${currentPrice}` : ''}.
+            
+            Think through your analysis step by step:
+            1. Market sentiment and social signals
+            2. Technical analysis and price action
+            3. Risk factors and potential catalysts
+            4. Position sizing and entry/exit strategy
+            5. Final recommendation with confidence level
+            
+            Provide a clear LONG or SHORT decision with confidence level (0-100).
+            Use degen crypto language but be informative and analytical.
+            `;
+            
+            let finalAnswer = '';
+            const chainOfThought = [];
+            
+            const callbacks = {
+                onThought: (thought) => {
+                    chainOfThought.push(thought);
+                    if (streamingCallbacks.onThought) {
+                        streamingCallbacks.onThought(thought);
+                    }
+                    // Broadcast to WebSocket clients
+                    broadcastToWebSockets({
+                        type: 'thinking',
+                        data: {
+                            text: thought.text,
+                            order: thought.order,
+                            timestamp: thought.timestamp,
+                            tokenSymbol: tokenSymbol
+                        }
+                    });
+                },
+                onFinal: (text, isComplete) => {
+                    finalAnswer += text;
+                    if (streamingCallbacks.onFinal) {
+                        streamingCallbacks.onFinal(text, isComplete);
+                    }
+                    // Broadcast to WebSocket clients
+                    broadcastToWebSockets({
+                        type: isComplete ? 'final' : 'final-part',
+                        data: {
+                            text: text,
+                            isComplete: isComplete,
+                            tokenSymbol: tokenSymbol
+                        }
+                    });
+                },
+                onComplete: (result) => {
+                    if (streamingCallbacks.onComplete) {
+                        streamingCallbacks.onComplete(result);
+                    }
+                    // Broadcast completion to WebSocket clients
+                    broadcastToWebSockets({
+                        type: 'complete',
+                        data: {
+                            tokenSymbol: tokenSymbol,
+                            totalTokens: result.totalTokens,
+                            thoughtTokens: result.thoughtTokens,
+                            finalTokens: result.finalTokens
+                        }
+                    });
+                },
+                onError: (error) => {
+                    if (streamingCallbacks.onError) {
+                        streamingCallbacks.onError(error);
+                    }
+                    // Broadcast error to WebSocket clients
+                    broadcastToWebSockets({
+                        type: 'error',
+                        data: {
+                            error: error.message,
+                            tokenSymbol: tokenSymbol
+                        }
+                    });
+                }
+            };
+            
+            await flashThinkingClient.streamWithThoughts(prompt, callbacks);
+            
+            // Parse the final answer for decision and confidence
+            const decision = extractDecision(finalAnswer);
+            const confidence = extractConfidence(finalAnswer);
+            
+            // Generate public content using FrontendIntegration
+            let publicContent = null;
+            if (frontendIntegration) {
+                try {
+                    publicContent = frontendIntegration.generatePublicContent(
+                        tokenSymbol,
+                        chainOfThought,
+                        finalAnswer,
+                        result.totalTokens,
+                        result.thoughtTokens,
+                        true // Include teaser content
+                    );
+                } catch (error) {
+                    console.warn('⚠️ Public content generation failed:', error.message);
+                }
+            }
+            
+            // Fallback public summary if generation fails
+            const publicSummary = publicContent?.publicSummary || 
+                `🚀 ${tokenSymbol} Analysis: ${decision} signal with ${confidence}% confidence! Flash Thinking analysis complete - unlock premium for full chain-of-thought! 💎`;
+            
+            const analysis = {
+                id: Date.now(),
+                tokenSymbol: tokenSymbol,
+                currentPrice: currentPrice,
+                timestamp: new Date(),
+                publicSummary: publicSummary,
+                decision: decision,
+                confidence: confidence,
+                finalAnswer: finalAnswer,
+                chainOfThought: chainOfThought,
+                premiumAnalysis: finalAnswer, // Full analysis is premium
+                teaserContent: publicContent?.teaserContent,
+                contentPreview: publicContent?.contentPreview,
+                isUnlocked: false,
+                flashThinking: true,
+                totalTokens: result.totalTokens,
+                thoughtTokens: result.thoughtTokens
+            };
+            
+            return analysis;
+        } else {
+            // Fallback to regular analysis
+            return await generateTradingAnalysis(tokenSymbol, currentPrice);
+        }
+        
+    } catch (error) {
+        console.error('Streaming analysis error:', error);
+        agentState.status = "FAILED";
+        addLog(`❌ Streaming analysis failed: ${error.message}`, "public");
+        
+        if (streamingCallbacks && streamingCallbacks.onError) {
+            streamingCallbacks.onError(error);
+        }
+        
+        return null;
+    }
+}
+
 // --- AGENT LOGIC ---
 async function generateTradingAnalysis(tokenSymbol, currentPrice = null) {
     try {
@@ -202,16 +556,55 @@ async function generateTradingAnalysis(tokenSymbol, currentPrice = null) {
         const response = result.response.text();
         
         // Parse the response (in production, you'd want more robust parsing)
+        const decision = extractDecision(response);
+        const confidence = extractConfidence(response);
+        const premiumAnalysis = extractSection(response, ['premium', 'analysis', 'detailed']);
+        
+        // Create mock chain of thought for non-Flash Thinking analysis
+        const mockChainOfThought = [{
+            text: `Analyzing ${tokenSymbol} market conditions and sentiment...`,
+            thought: true,
+            order: 1,
+            timestamp: Date.now(),
+            tokenCount: 50
+        }];
+        
+        // Generate public content using FrontendIntegration
+        let publicContent = null;
+        if (frontendIntegration) {
+            try {
+                publicContent = frontendIntegration.generatePublicContent(
+                    tokenSymbol,
+                    mockChainOfThought,
+                    response,
+                    1000, // Estimated total tokens
+                    200,  // Estimated thought tokens
+                    true  // Include teaser content
+                );
+            } catch (error) {
+                console.warn('⚠️ Public content generation failed:', error.message);
+            }
+        }
+        
+        // Fallback public summary if generation fails
+        const publicSummary = publicContent?.publicSummary || 
+            extractSection(response, ['public', 'summary']) ||
+            `🚀 ${tokenSymbol} Analysis: ${decision} signal with ${confidence}% confidence! Unlock premium for detailed analysis! 💎`;
+        
         const analysis = {
             id: Date.now(),
             tokenSymbol: tokenSymbol,
             currentPrice: currentPrice,
             timestamp: new Date(),
-            publicSummary: extractSection(response, ['public', 'summary']),
-            decision: extractDecision(response),
-            confidence: extractConfidence(response),
-            premiumAnalysis: extractSection(response, ['premium', 'analysis', 'detailed']),
-            isUnlocked: false
+            publicSummary: publicSummary,
+            decision: decision,
+            confidence: confidence,
+            premiumAnalysis: premiumAnalysis,
+            teaserContent: publicContent?.teaserContent,
+            contentPreview: publicContent?.contentPreview,
+            isUnlocked: false,
+            totalTokens: 1000,
+            thoughtTokens: 200
         };
 
         // --- SIMULATION INTEGRATION ---
@@ -515,6 +908,275 @@ app.get('/api/logs/premium', async (req, res) => {
     }
 });
 
+// Server-Sent Events endpoint for streaming analysis with backpressure handling
+app.get('/stream/analyze', (req, res) => {
+    const { token, price, requestId } = req.query;
+    
+    if (!token) {
+        return res.status(400).json({ error: 'Token parameter is required' });
+    }
+    
+    const connectionId = Date.now() + Math.random();
+    let isConnectionActive = true;
+    let messageBuffer = [];
+    const MAX_SSE_BUFFER = 50;
+    
+    // Set up SSE headers with proper CORS and caching
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': process.env.FRONTEND_URL || '*',
+        'Access-Control-Allow-Headers': 'Cache-Control, Content-Type',
+        'Access-Control-Allow-Credentials': 'true',
+        'X-Accel-Buffering': 'no' // Disable nginx buffering
+    });
+    
+    // Helper function to write SSE events with backpressure handling
+    const writeSSEEvent = (type, data, eventId = null) => {
+        if (!isConnectionActive) return false;
+        
+        try {
+            const eventData = JSON.stringify({ type, data });
+            let sseMessage = `data: ${eventData}\n\n`;
+            
+            if (eventId) {
+                sseMessage = `id: ${eventId}\n${sseMessage}`;
+            }
+            
+            // Check buffer size for backpressure
+            if (messageBuffer.length >= MAX_SSE_BUFFER) {
+                console.warn('SSE buffer full, dropping oldest messages');
+                messageBuffer.splice(0, messageBuffer.length - MAX_SSE_BUFFER + 1);
+            }
+            
+            messageBuffer.push(sseMessage);
+            
+            // Try to flush buffer
+            const success = res.write(sseMessage);
+            if (!success) {
+                // Backpressure detected, wait for drain
+                res.once('drain', () => {
+                    console.log('SSE drain event received');
+                });
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('SSE write error:', error);
+            isConnectionActive = false;
+            return false;
+        }
+    };
+    
+    // Send initial connection event
+    writeSSEEvent('connection', { 
+        message: 'Connected to streaming analysis', 
+        token: token,
+        connectionId: connectionId,
+        timestamp: Date.now()
+    }, connectionId);
+    
+    // Send keep-alive ping every 30 seconds
+    const keepAliveInterval = setInterval(() => {
+        if (isConnectionActive) {
+            writeSSEEvent('ping', { timestamp: Date.now() });
+        } else {
+            clearInterval(keepAliveInterval);
+        }
+    }, 30000);
+    
+    // Set up streaming callbacks with backpressure handling
+    const streamingCallbacks = {
+        onThought: (thought) => {
+            writeSSEEvent('thinking', {
+                text: thought.text,
+                order: thought.order,
+                timestamp: thought.timestamp,
+                tokenSymbol: token,
+                requestId: requestId
+            });
+        },
+        onFinal: (text, isComplete) => {
+            writeSSEEvent(isComplete ? 'final' : 'final-part', { 
+                text: text, 
+                isComplete: isComplete,
+                tokenSymbol: token,
+                requestId: requestId
+            });
+        },
+        onComplete: (result) => {
+            writeSSEEvent('complete', {
+                tokenSymbol: token,
+                totalTokens: result.totalTokens,
+                thoughtTokens: result.thoughtTokens,
+                finalTokens: result.finalTokens,
+                requestId: requestId
+            });
+            
+            // Close connection after completion
+            setTimeout(() => {
+                if (isConnectionActive) {
+                    clearInterval(keepAliveInterval);
+                    res.end();
+                }
+            }, 1000);
+        },
+        onError: (error) => {
+            writeSSEEvent('error', { 
+                error: error.message,
+                tokenSymbol: token,
+                requestId: requestId
+            });
+            
+            // Close connection after error
+            setTimeout(() => {
+                if (isConnectionActive) {
+                    clearInterval(keepAliveInterval);
+                    res.end();
+                }
+            }, 1000);
+        }
+    };
+    
+    // Handle client disconnect
+    req.on('close', () => {
+        console.log(`SSE client disconnected: ${connectionId}`);
+        isConnectionActive = false;
+        clearInterval(keepAliveInterval);
+    });
+    
+    req.on('error', (error) => {
+        console.error('SSE request error:', error);
+        isConnectionActive = false;
+        clearInterval(keepAliveInterval);
+    });
+    
+    // Start streaming analysis
+    generateStreamingAnalysis(token, parseFloat(price) || null, streamingCallbacks)
+        .catch(error => {
+            console.error('SSE streaming error:', error);
+            if (isConnectionActive) {
+                writeSSEEvent('error', { error: 'Streaming analysis failed' });
+                setTimeout(() => {
+                    clearInterval(keepAliveInterval);
+                    res.end();
+                }, 1000);
+            }
+        });
+});
+
+
+
+// Handle WebSocket messages for /ws/analyze endpoint
+async function handleAnalyzeWebSocketMessage(ws, data) {
+    if (data.type === 'analyze') {
+        const { tokenSymbol, currentPrice, requestId } = data;
+        
+        if (!tokenSymbol) {
+            sendToWebSocket(ws, {
+                type: 'error',
+                data: { 
+                    error: 'Token symbol is required',
+                    requestId: requestId
+                }
+            });
+            return;
+        }
+        
+        // Send acknowledgment
+        sendToWebSocket(ws, {
+            type: 'analysis-started',
+            data: {
+                tokenSymbol: tokenSymbol,
+                currentPrice: currentPrice,
+                requestId: requestId,
+                timestamp: Date.now()
+            }
+        });
+        
+        // Set up streaming callbacks for this specific connection
+        const streamingCallbacks = {
+            onThought: (thought) => {
+                sendToWebSocket(ws, {
+                    type: 'thinking',
+                    data: {
+                        text: thought.text,
+                        order: thought.order,
+                        timestamp: thought.timestamp,
+                        tokenSymbol: tokenSymbol,
+                        requestId: requestId
+                    }
+                });
+            },
+            onFinal: (text, isComplete) => {
+                sendToWebSocket(ws, {
+                    type: isComplete ? 'final' : 'final-part',
+                    data: { 
+                        text: text, 
+                        isComplete: isComplete,
+                        tokenSymbol: tokenSymbol,
+                        requestId: requestId
+                    }
+                });
+            },
+            onComplete: (result) => {
+                sendToWebSocket(ws, {
+                    type: 'complete',
+                    data: {
+                        tokenSymbol: tokenSymbol,
+                        totalTokens: result.totalTokens,
+                        thoughtTokens: result.thoughtTokens,
+                        finalTokens: result.finalTokens,
+                        requestId: requestId
+                    }
+                });
+            },
+            onError: (error) => {
+                sendToWebSocket(ws, {
+                    type: 'error',
+                    data: { 
+                        error: error.message,
+                        tokenSymbol: tokenSymbol,
+                        requestId: requestId
+                    }
+                });
+            }
+        };
+        
+        await generateStreamingAnalysis(tokenSymbol, currentPrice, streamingCallbacks);
+    } else if (data.type === 'ping') {
+        // Handle ping for connection health
+        sendToWebSocket(ws, {
+            type: 'pong',
+            data: { timestamp: Date.now() }
+        });
+    } else {
+        sendToWebSocket(ws, {
+            type: 'error',
+            data: { error: `Unknown message type: ${data.type}` }
+        });
+    }
+}
+
+// Handle generic WebSocket messages for other endpoints
+async function handleGenericWebSocketMessage(ws, data) {
+    if (data.type === 'analyze') {
+        // Redirect to analyze endpoint handling
+        await handleAnalyzeWebSocketMessage(ws, data);
+    } else if (data.type === 'ping') {
+        sendToWebSocket(ws, {
+            type: 'pong',
+            data: { timestamp: Date.now() }
+        });
+    } else {
+        sendToWebSocket(ws, {
+            type: 'error',
+            data: { error: `Unknown message type: ${data.type}` }
+        });
+    }
+}
+
 // Request trading analysis
 app.post('/api/analyze', async (req, res) => {
     try {
@@ -530,11 +1192,39 @@ app.post('/api/analyze', async (req, res) => {
             return res.status(500).json({ error: 'Analysis generation failed' });
         }
         
+        // Create non-premium response with proper content gating
+        let nonPremiumResponse = null;
+        if (frontendIntegration && analysis.chainOfThought) {
+            try {
+                nonPremiumResponse = frontendIntegration.createNonPremiumResponse(
+                    analysis.tokenSymbol,
+                    analysis.chainOfThought || [],
+                    analysis.finalAnswer || analysis.premiumAnalysis,
+                    analysis.totalTokens || 1000,
+                    analysis.thoughtTokens || 200
+                );
+            } catch (error) {
+                console.warn('⚠️ Non-premium response generation failed:', error.message);
+            }
+        }
+        
         res.json({
             success: true,
             analysis: {
-                ...analysis,
+                id: analysis.id,
+                tokenSymbol: analysis.tokenSymbol,
+                currentPrice: analysis.currentPrice,
+                timestamp: analysis.timestamp,
+                decision: analysis.decision,
+                confidence: analysis.confidence,
+                publicSummary: nonPremiumResponse?.publicSummary || analysis.publicSummary,
+                finalAnswer: nonPremiumResponse?.finalAnswer || analysis.teaserContent || analysis.publicSummary,
+                chainOfThought: [], // Empty for non-premium users
+                totalTokens: analysis.totalTokens || 1000,
+                thoughtTokens: analysis.thoughtTokens || 200,
                 premiumAnalysis: '[PREMIUM CONTENT - PAYMENT REQUIRED]', // Hide premium content
+                teaserContent: analysis.teaserContent,
+                contentPreview: analysis.contentPreview,
                 simulationSummary: analysis.simulation ? {
                     finalPnlUsd: analysis.simulation.finalPnlUsd,
                     finalRoi: analysis.simulation.finalRoi,
@@ -545,7 +1235,9 @@ app.post('/api/analyze', async (req, res) => {
             },
             meta: {
                 disclaimer: 'SIMULATION - NO REAL TXS',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                contentType: 'public',
+                upgradeMessage: 'Unlock premium analysis with payment verification'
             }
         });
         
@@ -580,10 +1272,21 @@ app.post('/api/unlock', async (req, res) => {
         
         analysis.isUnlocked = true;
         
+        // Return full premium content
         res.json({
             success: true,
-            analysis: analysis,
-            message: 'Premium content unlocked'
+            analysis: {
+                ...analysis,
+                finalAnswer: analysis.finalAnswer || analysis.premiumAnalysis, // Show full content
+                chainOfThought: analysis.chainOfThought || [], // Show full chain of thought
+                premiumAnalysis: analysis.premiumAnalysis // Show premium analysis
+            },
+            message: 'Premium content unlocked',
+            meta: {
+                contentType: 'premium',
+                paymentVerified: true,
+                disclaimer: 'SIMULATION - NO REAL TXS'
+            }
         });
         
     } catch (error) {
@@ -634,10 +1337,84 @@ app.get('/api/current-analysis', (req, res) => {
         return res.status(404).json({ error: 'No current analysis available' });
     }
     
+    // Generate public content for current analysis
+    let publicResponse = null;
+    if (frontendIntegration && agentState.currentAnalysis) {
+        try {
+            publicResponse = frontendIntegration.createNonPremiumResponse(
+                agentState.currentAnalysis.tokenSymbol,
+                agentState.currentAnalysis.chainOfThought || [],
+                agentState.currentAnalysis.finalAnswer || agentState.currentAnalysis.premiumAnalysis,
+                agentState.currentAnalysis.totalTokens || 1000,
+                agentState.currentAnalysis.thoughtTokens || 200
+            );
+        } catch (error) {
+            console.warn('⚠️ Public content generation failed:', error.message);
+        }
+    }
+    
     res.json({
         ...agentState.currentAnalysis,
-        premiumAnalysis: '[PREMIUM CONTENT - PAYMENT REQUIRED]'
+        publicSummary: publicResponse?.publicSummary || agentState.currentAnalysis.publicSummary,
+        finalAnswer: publicResponse?.finalAnswer || agentState.currentAnalysis.teaserContent || agentState.currentAnalysis.publicSummary,
+        chainOfThought: [], // Empty for non-premium users
+        premiumAnalysis: '[PREMIUM CONTENT - PAYMENT REQUIRED]',
+        meta: {
+            contentType: 'public',
+            upgradeMessage: 'Pay to unlock full premium analysis with chain-of-thought reasoning'
+        }
     });
+});
+
+// Get public content preview for a specific analysis
+app.get('/api/analysis/:id/preview', (req, res) => {
+    try {
+        const analysisId = parseInt(req.params.id);
+        const analysis = agentState.tradingDecisions.find(a => a.id === analysisId);
+        
+        if (!analysis) {
+            return res.status(404).json({ error: 'Analysis not found' });
+        }
+        
+        // Generate public content preview
+        let publicContent = null;
+        if (frontendIntegration) {
+            try {
+                publicContent = frontendIntegration.generatePublicContent(
+                    analysis.tokenSymbol,
+                    analysis.chainOfThought || [],
+                    analysis.finalAnswer || analysis.premiumAnalysis,
+                    analysis.totalTokens || 1000,
+                    analysis.thoughtTokens || 200,
+                    true // Include teaser content
+                );
+            } catch (error) {
+                console.warn('⚠️ Public content generation failed:', error.message);
+            }
+        }
+        
+        res.json({
+            id: analysis.id,
+            tokenSymbol: analysis.tokenSymbol,
+            decision: analysis.decision,
+            confidence: analysis.confidence,
+            timestamp: analysis.timestamp,
+            publicSummary: publicContent?.publicSummary || analysis.publicSummary,
+            teaserContent: publicContent?.teaserContent,
+            contentPreview: publicContent?.contentPreview,
+            isUnlocked: analysis.isUnlocked,
+            meta: {
+                contentType: 'preview',
+                paymentRequired: !analysis.isUnlocked,
+                price: PEEK_PRICE,
+                currency: 'SOL'
+            }
+        });
+        
+    } catch (error) {
+        console.error('Analysis preview error:', error);
+        res.status(500).json({ error: 'Failed to generate analysis preview' });
+    }
 });
 
 // Helper functions for chain of thought generation
@@ -796,13 +1573,86 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Connection health monitoring and cleanup
+setInterval(() => {
+    const now = Date.now();
+    const staleConnections = [];
+    
+    activeConnections.forEach((connInfo, ws) => {
+        // Check for stale connections (no activity for 5 minutes)
+        const lastActivity = connInfo.lastMessageAt || connInfo.connectedAt;
+        if (now - lastActivity > 5 * 60 * 1000) {
+            staleConnections.push(ws);
+        } else if (ws.readyState !== ws.OPEN) {
+            staleConnections.push(ws);
+        }
+    });
+    
+    // Clean up stale connections
+    staleConnections.forEach(ws => {
+        console.log('Cleaning up stale WebSocket connection');
+        activeConnections.delete(ws);
+        connectionBuffers.delete(ws);
+        if (ws.readyState === ws.OPEN) {
+            ws.close();
+        }
+    });
+    
+    if (activeConnections.size > 0) {
+        console.log(`📊 Active WebSocket connections: ${activeConnections.size}`);
+    }
+}, 60000); // Check every minute
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM, shutting down gracefully...');
+    
+    // Close all WebSocket connections
+    activeConnections.forEach((connInfo, ws) => {
+        sendToWebSocket(ws, {
+            type: 'server-shutdown',
+            data: { message: 'Server is shutting down' }
+        });
+        ws.close();
+    });
+    
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 Received SIGINT, shutting down gracefully...');
+    
+    // Close all WebSocket connections
+    activeConnections.forEach((connInfo, ws) => {
+        sendToWebSocket(ws, {
+            type: 'server-shutdown',
+            data: { message: 'Server is shutting down' }
+        });
+        ws.close();
+    });
+    
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+    });
+});
+
 // Start the server
-app.listen(PORT, async () => {
+server.listen(PORT, async () => {
     console.log(`🚀 Degen Agent running on http://localhost:${PORT}`);
+    console.log(`🔌 WebSocket endpoints:`);
+    console.log(`   - ws://localhost:${PORT}/ws/analyze (dedicated analysis endpoint)`);
+    console.log(`   - ws://localhost:${PORT}/ (general WebSocket endpoint)`);
+    console.log(`📡 SSE endpoints:`);
+    console.log(`   - http://localhost:${PORT}/stream/analyze (streaming analysis)`);
     console.log(`🔑 Agent Wallet: ${agentKeypair.publicKey.toBase58()}`);
     console.log(`💰 Payment Address: ${SERVER_WALLET}`);
     console.log(`💵 Peek Price: ${PEEK_PRICE} SOL`);
     console.log(`🔥 God Mode Price: ${GOD_MODE_PRICE} SOL`);
+    console.log(`🧠 Flash Thinking: ${flashThinkingClient ? 'Enabled' : 'Disabled'}`);
     
     // Initial startup message
     addLog("🤖 RektOrRich Agent Online. Ready to analyze and predict!", "public");

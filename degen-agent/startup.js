@@ -11,10 +11,138 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Validate Gemini API connectivity and configuration
+async function validateGeminiConnectivity() {
+  console.log('🔍 Validating Gemini API configuration...');
+  
+  // Check required environment variables
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is required. Get one from https://aistudio.google.com/app/apikey');
+  }
+  
+  if (!process.env.GEMINI_FLASH_MODEL) {
+    console.warn('⚠️  GEMINI_FLASH_MODEL not set, using default: gemini-2.0-flash-thinking-exp-01-21');
+  }
+  
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    
+    const modelName = process.env.GEMINI_FLASH_MODEL || 'gemini-2.0-flash-thinking-exp-01-21';
+    
+    // Test basic connectivity with a simple generation
+    const model = genAI.getGenerativeModel({ 
+      model: modelName,
+      generationConfig: {
+        temperature: parseFloat(process.env.GEMINI_THOUGHTS_TEMPERATURE) || 1.0,
+        maxOutputTokens: 100, // Small test
+      }
+    });
+    
+    console.log(`📡 Testing connectivity to model: ${modelName}`);
+    
+    // Test basic generation
+    const testResult = await model.generateContent('Test connectivity');
+    if (testResult.response.text()) {
+      console.log('✅ Gemini API connectivity validated');
+    } else {
+      throw new Error('Empty response from Gemini API');
+    }
+    
+    // Validate Flash Thinking configuration
+    const enableThoughts = process.env.GEMINI_ENABLE_THOUGHTS === 'true';
+    if (enableThoughts) {
+      console.log('🧠 Gemini Flash Thinking is enabled');
+      
+      // Validate thinking-specific configuration
+      const maxTokens = parseInt(process.env.COST_CONTROL_MAX_TOKENS) || 4000;
+      const maxThoughtTokens = parseInt(process.env.COST_CONTROL_MAX_THOUGHT_TOKENS) || 2000;
+      const temperature = parseFloat(process.env.GEMINI_THOUGHTS_TEMPERATURE) || 1.0;
+      
+      console.log(`   📊 Max tokens: ${maxTokens} (thoughts: ${maxThoughtTokens})`);
+      console.log(`   🌡️  Temperature: ${temperature}`);
+      
+      // Test Flash Thinking capability
+      try {
+        const thinkingModel = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig: {
+            temperature: temperature,
+            maxOutputTokens: 50,
+          },
+          systemInstruction: {
+            parts: [{ text: "Think step by step about this simple question." }]
+          }
+        });
+        
+        const thinkingResult = await thinkingModel.generateContent({
+          contents: [{ parts: [{ text: "What is 2+2?" }] }],
+          generationConfig: {
+            candidateCount: 1,
+            maxOutputTokens: 50,
+          }
+        });
+        
+        if (thinkingResult.response.text()) {
+          console.log('✅ Flash Thinking capability validated');
+        }
+      } catch (thinkingError) {
+        console.warn('⚠️  Flash Thinking test failed, but basic API works:', thinkingError.message);
+        console.warn('   This may indicate the model doesn\'t support thinking or needs different configuration');
+      }
+      
+      // Validate cost control settings
+      if (maxTokens > 8000) {
+        console.warn('⚠️  COST_CONTROL_MAX_TOKENS is high (>8000), monitor costs carefully');
+      }
+      
+      if (maxThoughtTokens > maxTokens) {
+        console.warn('⚠️  COST_CONTROL_MAX_THOUGHT_TOKENS exceeds COST_CONTROL_MAX_TOKENS');
+      }
+      
+    } else {
+      console.log('📝 Using standard Gemini generation (Flash Thinking disabled)');
+      console.log('   To enable Flash Thinking, set GEMINI_ENABLE_THOUGHTS=true');
+    }
+    
+    // Validate model name format
+    if (!modelName.includes('gemini')) {
+      console.warn('⚠️  Model name doesn\'t appear to be a Gemini model:', modelName);
+    }
+    
+    if (enableThoughts && !modelName.includes('thinking')) {
+      console.warn('⚠️  Flash Thinking enabled but model name doesn\'t include "thinking"');
+      console.warn('   Ensure you\'re using a thinking-capable model like gemini-2.0-flash-thinking-exp-01-21');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Gemini API validation failed:', error.message);
+    
+    // Provide helpful error messages
+    if (error.message.includes('API_KEY_INVALID')) {
+      console.error('   💡 Check your GEMINI_API_KEY in .env file');
+      console.error('   💡 Get a new key from: https://aistudio.google.com/app/apikey');
+    } else if (error.message.includes('MODEL_NOT_FOUND')) {
+      console.error('   💡 Check your GEMINI_FLASH_MODEL in .env file');
+      console.error('   💡 Available models: gemini-2.0-flash-thinking-exp-01-21');
+    } else if (error.message.includes('QUOTA_EXCEEDED')) {
+      console.error('   💡 Gemini API quota exceeded, check your usage limits');
+    } else if (error.message.includes('PERMISSION_DENIED')) {
+      console.error('   💡 API key doesn\'t have permission for this model');
+    }
+    
+    throw error;
+  }
+}
+
 // Initialize agent integration
 async function initializeAgentIntegration() {
   try {
     console.log('🚀 Initializing Degen Agent integration with frontend...');
+    
+    // Validate Gemini API first
+    await validateGeminiConnectivity();
 
     // Setup agent keypair
     let agentKeypair;
