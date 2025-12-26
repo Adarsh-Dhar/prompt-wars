@@ -2,10 +2,12 @@ import * as anchor from '@coral-xyz/anchor';
 import fetch from 'cross-fetch';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
+import { sendSolanaTransaction, confirmSolanaTransaction } from '../../blockchain-mocks/solana';
 
 dotenv.config();
 
 // Setup Connection & Wallet - default to devnet so all tx use devnet
+// Keep a Connection object for compatibility but avoid using it for sending transactions
 const connection = new anchor.web3.Connection(process.env.RPC_URL || 'https://api.devnet.solana.com');
 
 let wallet;
@@ -36,32 +38,23 @@ if (!process.env.SOLANA_PRIVATE_KEY) {
 
 // Helper function to send SOL payments
 async function sendSolPayment(recipientPubkey, amountSol) {
-    const transaction = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: new anchor.web3.PublicKey(recipientPubkey),
-            lamports: amountSol * 1e9,
-        })
-    );
-    
-    // Get latest blockhash
-    const { blockhash } = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = wallet.publicKey;
-
-    // Sign and send
-    transaction.sign(wallet);
-    const signature = await connection.sendRawTransaction(transaction.serialize());
-    await connection.confirmTransaction(signature); // Wait for confirmation so server sees it
-    return signature;
+    // Use mock send so no real on-chain transaction occurs
+    const payload = {
+        from: wallet.publicKey?.toBase58?.() || 'MOCK_WALLET',
+        to: recipientPubkey,
+        lamports: Math.round(amountSol * 1e9)
+    };
+    const result = await sendSolanaTransaction(payload);
+    if (!result.success) throw new Error(result.error);
+    return result.txId;
 }
 
 // --- TOOL DEFINITIONS ---
 
 // 1. Check Balance Tool
 async function getBalance() {
-    const balance = await connection.getBalance(wallet.publicKey);
-    return { sol: balance / 1e9, pubkey: wallet.publicKey.toBase58() };
+    // Return a deterministic mock balance (no chain call)
+    return { sol: parseFloat(process.env.MOCK_BALANCE_SOL || '10.0'), pubkey: wallet.publicKey.toBase58() };
 }
 
 // 2. Swap Tool (Uses Jupiter API)
@@ -95,14 +88,12 @@ async function executeSwap({ outputMint, amountSol }) {
         transaction.sign([wallet]);
         const rawTransaction = transaction.serialize();
 
-        const txid = await connection.sendRawTransaction(rawTransaction, {
-            skipPreflight: true,
-            maxRetries: 2
-        });
-        
-        await connection.confirmTransaction(txid);
-        
-        return { status: "success", txid, message: `Swapped ${amountSol} SOL for token` };
+        // Instead of sending a real transaction, simulate a swap and return a mock tx id
+        const txResult = await sendSolanaTransaction({ from: wallet.publicKey.toBase58(), to: outputMint, lamports: Math.floor(amountSol * 1e9) });
+        if (!txResult.success) {
+            return { status: 'error', message: txResult.error };
+        }
+        return { status: "success", txid: txResult.txId, message: `Swapped ${amountSol} SOL for token (mock)` };
     } catch (error) {
         console.error("Swap Failed:", error);
         return { status: "error", message: error.message };
@@ -185,4 +176,3 @@ export const functions = {
     executeSwap,
     fetchPremiumData
 };
-

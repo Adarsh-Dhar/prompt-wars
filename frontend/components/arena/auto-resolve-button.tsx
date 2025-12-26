@@ -7,6 +7,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import * as anchor from "@coral-xyz/anchor";
 import { autoResolveFromProof } from "@/lib/auto-resolve"
 import { getPaymentToken } from "@/lib/agent-server"
+import { getSafeWalletAdapter } from "@/lib/blockchain-adapter"
 
 interface AutoResolveButtonProps {
   marketId: string
@@ -46,18 +47,8 @@ export function AutoResolveButton({
       const paymentSignature = getPaymentToken()
 
       // Create wallet adapter
-      const wallet = {
-        publicKey,
-        sendTransaction,
-        signTransaction: sendTransaction,
-        signAllTransactions: async (txs) => {
-          const signed = []
-          for (const tx of txs) {
-            signed.push(await sendTransaction(tx, connection))
-          }
-          return signed
-        },
-      } as any
+      const safeWallet = getSafeWalletAdapter({ publicKey, connected, sendTransaction } as any, connection)
+      const wallet = safeWallet as any
 
       // Call auto-resolve service
       const result = await autoResolveFromProof({

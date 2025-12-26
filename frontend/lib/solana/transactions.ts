@@ -1,5 +1,4 @@
-import * as anchor from "@coral-xyz/anchor";
-import { getConnection } from "./client"
+import { confirmSolanaTransaction } from '../../../blockchain-mocks/solana';
 
 export type PaymentCheck = {
   payer: string
@@ -20,59 +19,16 @@ export async function assertPaymentToServer(
     throw new Error("Server wallet not configured")
   }
 
-  const connection = getConnection()
-
-  // Ensure the transaction is confirmed on chain
-  const confirmation = await connection.confirmTransaction(signature, "confirmed")
-  if (confirmation.value.err) {
-    throw new Error("Transaction failed on chain")
+  // Use mock confirmation to avoid chain interactions
+  const confirmed = await confirmSolanaTransaction(signature);
+  if (!confirmed || !confirmed.confirmed) {
+    throw new Error('Transaction not found or not confirmed (mock)')
   }
 
-  const tx = await connection.getParsedTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  })
-
-  if (!tx) {
-    throw new Error("Transaction not found or not yet confirmed")
-  }
-
-  if (tx.meta?.err) {
-    throw new Error("Transaction contains an error")
-  }
-
-  const transferIx = tx.transaction.message.instructions.find(
-    (ix: any) => "parsed" in ix && (ix as any).parsed?.type === "transfer"
-  ) as any
-
-  if (!transferIx?.parsed?.info) {
-    throw new Error("Transfer instruction not found in transaction")
-  }
-
-  const info = transferIx.parsed.info
-  const destination = info.destination as string | undefined
-  const source = info.source as string | undefined
-  const lamports = Number(info.lamports) || 0
-
-  if (!destination || !source) {
-    throw new Error("Unable to read transfer accounts")
-  }
-
-  if (destination !== serverWallet) {
-    throw new Error("Payment destination does not match server wallet")
-  }
-
-  if (expectedPayer && source !== expectedPayer) {
-    throw new Error("Payment source does not match wallet")
-  }
-
-  if (lamports < expectedLamports) {
-    throw new Error("Payment amount is below required minimum")
-  }
-
-  return { payer: source, lamports }
+  // In mock mode we return a deterministic success, assuming server received expectedLamports
+  return { payer: expectedPayer || 'MOCK_PAYER', lamports: expectedLamports }
 }
 
 export function solToLamports(amount: number) {
-  return Math.ceil(amount * anchor.web3.LAMPORTS_PER_SOL)
+  return Math.ceil(amount * 1e9)
 }

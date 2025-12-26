@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { AnchorProvider, Program, Wallet, BN } from "@coral-xyz/anchor"
 import { agentRegistryIdl, AGENT_REGISTRY_PROGRAM_ID, AgentRegistryIdl } from "./agent-registry-idl"
+import { sendRawTransaction as mockSendRawTransaction, confirmTransaction as mockConfirmTransaction } from '../../../blockchain-mocks/solana';
 
 const PROGRAM_ID = new anchor.web3.PublicKey(AGENT_REGISTRY_PROGRAM_ID)
 const REGISTRY_SEED = Buffer.from("registry")
@@ -13,6 +14,8 @@ const dummyWallet = {
   signTransaction: async (tx: any) => tx,
   signAllTransactions: async (txs: any[]) => txs,
 }
+
+const IS_MOCK = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_MOCK_BLOCKCHAIN === 'true';
 
 export function getProgram(connection: anchor.web3.Connection, wallet?: Wallet) {
   try {
@@ -460,13 +463,18 @@ export async function registerAgent(params: {
     const signedTx = await wallet.signTransaction!(transaction)
     console.log("Transaction signed successfully")
     
-    const sig = await connection.sendRawTransaction(signedTx.serialize())
+    const sig = IS_MOCK
+      ? await mockSendRawTransaction(signedTx.serialize(), { delayMs: 50 })
+      : await connection.sendRawTransaction(signedTx.serialize())
     console.log("Transaction sent, signature:", sig)
     
     // Confirm transaction
-    await connection.confirmTransaction(sig, "confirmed")
-    console.log("Transaction confirmed")
-    
+    if (IS_MOCK) {
+      await mockConfirmTransaction(sig)
+    } else {
+      await connection.confirmTransaction(sig, "confirmed")
+    }
+
     return { signature: sig, agentPda: agent }
   } catch (txError: any) {
     console.error("Transaction execution failed:", txError)

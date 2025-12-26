@@ -1,4 +1,3 @@
-import * as anchor from '@coral-xyz/anchor';
 import { ThoughtPart, PremiumLogEntry, DegenAnalysisResponse } from '../types';
 import { ContentEncryption } from './content-encryption';
 import { PaymentVerificationService } from './payment-verification';
@@ -68,10 +67,11 @@ export interface AgentRegistrationData {
 
 // Integration utilities
 export class FrontendIntegration {
-  private agentWallet: anchor.web3.Keypair;
-  private connection: anchor.web3.Connection;
+  // Use loose types to avoid hard dependency on anchor in mock environment
+  private agentWallet: any;
+  private connection: any;
 
-  constructor(agentWallet: anchor.web3.Keypair, connection: anchor.web3.Connection) {
+  constructor(agentWallet: any, connection: any) {
     this.agentWallet = agentWallet;
     this.connection = connection;
   }
@@ -88,7 +88,7 @@ export class FrontendIntegration {
         },
         body: JSON.stringify({
           ...registrationData,
-          walletAddress: this.agentWallet.publicKey.toBase58(),
+          walletAddress: typeof this.agentWallet?.publicKey?.toBase58 === 'function' ? this.agentWallet.publicKey.toBase58() : String(this.agentWallet?.publicKey || this.agentWallet),
           serverUrl: FRONTEND_CONFIG.agentServerUrl,
         }),
       });
@@ -139,9 +139,10 @@ export class FrontendIntegration {
   /**
    * Submit a trading decision to the frontend
    */
-  async submitTradingDecision(decision: TradingDecisionPayload): Promise<boolean> {
+    async submitTradingDecision(decision: TradingDecisionPayload): Promise<boolean> {
     try {
-      const response = await fetch(`${FRONTEND_CONFIG.url}/api/agents/${this.agentWallet.publicKey.toBase58()}/decisions`, {
+      const walletAddress = typeof this.agentWallet?.publicKey?.toBase58 === 'function' ? this.agentWallet.publicKey.toBase58() : String(this.agentWallet?.publicKey || this.agentWallet);
+      const response = await fetch(`${FRONTEND_CONFIG.url}/api/agents/${walletAddress}/decisions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,15 +161,16 @@ export class FrontendIntegration {
       console.error('Error submitting trading decision:', error);
       return false;
     }
-  }
+    }
 
   /**
    * Get agent status from the frontend
    */
-  async getAgentStatus(): Promise<any> {
+    async getAgentStatus(): Promise<any> {
     try {
-      const response = await fetch(`${FRONTEND_CONFIG.url}/api/agents/${this.agentWallet.publicKey.toBase58()}/status`);
-      
+      const walletAddress = typeof this.agentWallet?.publicKey?.toBase58 === 'function' ? this.agentWallet.publicKey.toBase58() : String(this.agentWallet?.publicKey || this.agentWallet);
+      const response = await fetch(`${FRONTEND_CONFIG.url}/api/agents/${walletAddress}/status`);
+
       if (!response.ok) {
         return null;
       }
@@ -178,18 +180,19 @@ export class FrontendIntegration {
       console.error('Error getting agent status:', error);
       return null;
     }
-  }
+    }
 
   /**
    * Notify frontend of agent activity
    */
-  async notifyActivity(activity: {
+    async notifyActivity(activity: {
     type: 'analysis' | 'decision' | 'market_creation' | 'status_update';
     data: any;
     timestamp: Date;
-  }): Promise<void> {
+    }): Promise<void> {
     try {
-      await fetch(`${FRONTEND_CONFIG.url}/api/agents/${this.agentWallet.publicKey.toBase58()}/activity`, {
+      const walletAddress = typeof this.agentWallet?.publicKey?.toBase58 === 'function' ? this.agentWallet.publicKey.toBase58() : String(this.agentWallet?.publicKey || this.agentWallet);
+      await fetch(`${FRONTEND_CONFIG.url}/api/agents/${walletAddress}/activity`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -199,7 +202,7 @@ export class FrontendIntegration {
     } catch (error) {
       console.error('Error notifying frontend of activity:', error);
     }
-  }
+    }
 }
 
 // Utility functions for market integration

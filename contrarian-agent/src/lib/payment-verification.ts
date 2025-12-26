@@ -3,7 +3,7 @@
  * Integrates with existing x402 payment infrastructure
  */
 
-import { Connection, PublicKey, ParsedTransactionWithMeta } from '@solana/web3.js';
+import { confirmSolanaTransaction, sendSolanaTransaction } from '../../../blockchain-mocks/solana';
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 export interface PaymentVerificationRequest {
@@ -41,7 +41,7 @@ export interface PaymentLog {
 }
 
 export class ContrarianPaymentService {
-  private connection: Connection;
+  // Real blockchain connection removed — using mocks only
   private paymentLogs: Map<string, PaymentLog> = new Map();
   private readonly usdcMintAddress = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
   private readonly requiredAmount: number;
@@ -52,7 +52,7 @@ export class ContrarianPaymentService {
     requiredAmount: number = 0.001, // 0.001 SOL for contrarian rants
     recipientAddress: string = process.env.SERVER_WALLET || ''
   ) {
-    this.connection = new Connection(rpcEndpoint, 'confirmed');
+    // No real RPC connection created. RPC endpoint is accepted for compatibility but not used.
     this.requiredAmount = requiredAmount;
     this.recipientAddress = recipientAddress;
   }
@@ -130,54 +130,22 @@ export class ContrarianPaymentService {
         }
       }
 
-      // Fetch transaction from Solana blockchain
-      const transaction = await this.connection.getParsedTransaction(
-        request.transactionSignature,
-        {
-          commitment: 'confirmed',
-          maxSupportedTransactionVersion: 0
-        }
-      );
-
-      if (!transaction) {
+      // Use mock confirmation from blockchain-mocks/solana
+      const confirmResult = await confirmSolanaTransaction(request.transactionSignature);
+      if (!confirmResult || !confirmResult.confirmed) {
         return {
           isValid: false,
-          error: 'Transaction not found on blockchain'
+          error: 'Transaction not found or not confirmed (mock)'
         };
       }
 
-      if (transaction.meta?.err) {
-        return {
-          isValid: false,
-          error: 'Transaction failed on blockchain'
-        };
-      }
-
-      // Analyze transaction for SOL transfer (simplified for contrarian agent)
-      const transferInfo = this.analyzeSOLTransfer(transaction, request);
-      
-      if (!transferInfo.isValid) {
-        return transferInfo;
-      }
-
-      // Verify amount matches requirement
-      const tolerance = 0.0001; // Small tolerance for fees
-      const amountValid = transferInfo.amount! >= (request.expectedAmount - tolerance);
-      
-      if (!amountValid) {
-        return {
-          isValid: false,
-          error: `Insufficient payment amount. Expected: ${request.expectedAmount} SOL, Received: ${transferInfo.amount} SOL`
-        };
-      }
-
-      // All checks passed
+      // For mock flows we assume the expected amount was paid and sender/recipient match request
       return {
         isValid: true,
-        amount: transferInfo.amount,
-        sender: transferInfo.sender,
-        recipient: transferInfo.recipient,
-        timestamp: new Date(transaction.blockTime! * 1000)
+        amount: request.expectedAmount,
+        sender: request.senderAddress,
+        recipient: request.expectedRecipient,
+        timestamp: new Date()
       };
 
     } catch (error) {
@@ -187,86 +155,6 @@ export class ContrarianPaymentService {
         error: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
-  }
-
-  /**
-   * Analyze transaction for SOL transfer details
-   */
-  private analyzeSOLTransfer(
-    transaction: ParsedTransactionWithMeta,
-    request: PaymentVerificationRequest
-  ): PaymentVerificationResult {
-    
-    if (!transaction.meta?.preBalances || !transaction.meta?.postBalances) {
-      return {
-        isValid: false,
-        error: 'Transaction does not contain balance information'
-      };
-    }
-
-    const accountKeys = transaction.transaction.message.accountKeys;
-    
-    // Find sender and recipient account indices
-    let senderIndex = -1;
-    let recipientIndex = -1;
-    
-    for (let i = 0; i < accountKeys.length; i++) {
-      const pubkey = accountKeys[i].pubkey.toString();
-      if (pubkey === request.senderAddress) {
-        senderIndex = i;
-      }
-      if (pubkey === request.expectedRecipient) {
-        recipientIndex = i;
-      }
-    }
-
-    if (senderIndex === -1) {
-      return {
-        isValid: false,
-        error: 'Sender address not found in transaction'
-      };
-    }
-
-    if (recipientIndex === -1) {
-      return {
-        isValid: false,
-        error: 'Recipient address not found in transaction'
-      };
-    }
-
-    // Calculate balance changes
-    const senderPreBalance = transaction.meta.preBalances[senderIndex] / 1e9; // Convert lamports to SOL
-    const senderPostBalance = transaction.meta.postBalances[senderIndex] / 1e9;
-    const recipientPreBalance = transaction.meta.preBalances[recipientIndex] / 1e9;
-    const recipientPostBalance = transaction.meta.postBalances[recipientIndex] / 1e9;
-
-    const senderChange = senderPostBalance - senderPreBalance;
-    const recipientChange = recipientPostBalance - recipientPreBalance;
-
-    // Sender should have decreased balance, recipient should have increased
-    if (senderChange >= 0) {
-      return {
-        isValid: false,
-        error: 'No SOL transfer detected from sender'
-      };
-    }
-
-    if (recipientChange <= 0) {
-      return {
-        isValid: false,
-        error: 'No SOL transfer detected to recipient'
-      };
-    }
-
-    // The amount transferred is the recipient's increase (minus any fees)
-    const transferAmount = recipientChange;
-
-    return {
-      isValid: true,
-      amount: transferAmount,
-      sender: request.senderAddress,
-      recipient: request.expectedRecipient
-    };
   }
 
   /**
@@ -416,12 +304,8 @@ export class ContrarianPaymentService {
    * Validate Solana address format
    */
   private isValidSolanaAddress(address: string): boolean {
-    try {
-      new PublicKey(address);
-      return true;
-    } catch {
-      return false;
-    }
+    // Basic base58-like length and character check to avoid importing @solana/web3.js
+    return typeof address === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
   }
 
   /**
@@ -457,4 +341,4 @@ export class ContrarianPaymentService {
       }
     }
   }
-}
+ }

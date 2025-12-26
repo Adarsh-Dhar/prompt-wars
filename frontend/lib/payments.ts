@@ -1,6 +1,10 @@
 // Payment utilities for Solana transactions
 import * as anchor from "@coral-xyz/anchor";
 import { WalletContextState } from '@solana/wallet-adapter-react';
+import { getSafeWalletAdapter } from './blockchain-adapter';
+import { confirmTransaction as mockConfirmTransaction } from '../../../blockchain-mocks/solana';
+
+const IS_MOCK = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_MOCK_BLOCKCHAIN === 'true';
 
 // Memo program ID (same on all Solana networks)
 const MEMO_PROGRAM_ID = new anchor.web3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
@@ -69,7 +73,7 @@ export async function sendSolPayment(
   }
 
   // Prepare blockhash + fee payer
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash, lastValidBlockHeight } = IS_MOCK ? { blockhash: 'mock_blockhash', lastValidBlockHeight: 0 } : await connection.getLatestBlockhash('confirmed');
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.publicKey;
 
@@ -105,25 +109,37 @@ export async function sendSolPayment(
   }
 
   try {
+    // Use safe adapter which may route to mocks in dev/CI
+    const safeWallet = getSafeWalletAdapter(wallet as WalletContextState, connection);
+    if (!safeWallet || !safeWallet.sendTransaction) {
+      throw new Error('No wallet adapter available to send transaction');
+    }
+
     // Send transaction with preflight (avoid minContextSlot to reduce RPC "invalid arguments" failures)
-    const signature = await wallet.sendTransaction(transaction, connection, {
+    const signature = await safeWallet.sendTransaction(transaction, connection, {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
     });
 
     // Wait for confirmation
-    const confirmation = await connection.confirmTransaction(
-      {
-        blockhash,
-        lastValidBlockHeight,
-        signature,
-      },
-      'confirmed'
-    );
-
-    if (confirmation.value.err) {
-      const errMessage = confirmation.value.err instanceof Error ? confirmation.value.err.message : JSON.stringify(confirmation.value.err);
-      throw new Error(`Transaction failed to confirm: ${errMessage}`);
+    let confirmation
+    if (IS_MOCK) {
+      confirmation = await mockConfirmTransaction(signature)
+      if (!confirmation.confirmed) throw new Error('Transaction failed to confirm (mock)')
+    } else {
+      const conf = await connection.confirmTransaction(
+        {
+          blockhash,
+          lastValidBlockHeight,
+          signature,
+        },
+        'confirmed'
+      )
+      confirmation = conf
+      if ((conf as any).value?.err) {
+        const errMessage = (conf as any).value.err instanceof Error ? (conf as any).value.err.message : JSON.stringify((conf as any).value.err);
+        throw new Error(`Transaction failed to confirm: ${errMessage}`);
+      }
     }
 
     return signature;
@@ -135,4 +151,3 @@ export async function sendSolPayment(
     throw new Error(err?.message ? `${err.message}${logs}${causeMsg}${ctx}` : `Failed to send transaction${ctx}`);
   }
 }
-

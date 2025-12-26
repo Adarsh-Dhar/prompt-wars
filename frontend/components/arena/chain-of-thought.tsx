@@ -8,6 +8,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { fetchAgentLogs, fetchPremiumLogs, getPaymentToken, setPaymentToken, clearPaymentToken, PEEK_PRICE, type AgentLog, type AgentLogsResponse } from "@/lib/agent-server"
+import { getSafeWalletAdapter } from "@/lib/blockchain-adapter"
 
 interface ChainOfThoughtProps {
   agentId: string
@@ -124,9 +125,9 @@ export function ChainOfThought({ agentId, initialLogs = [] }: ChainOfThoughtProp
 
       // Use fetchPremiumLogs which handles 402 payment flow automatically
       // It will trigger payment if needed and retry with signature
-      const wallet = { publicKey, connected, sendTransaction } as any
-      const result = await fetchPremiumLogs(agentId, connection, wallet)
-      
+      const safeWallet = getSafeWalletAdapter({ publicKey, connected, sendTransaction } as any, connection)
+      const result = await fetchPremiumLogs(agentId, connection, safeWallet as any)
+
       // Get the signature from the result (set by fetchPremiumLogs internally)
       const signature = result.signature
       if (signature) {

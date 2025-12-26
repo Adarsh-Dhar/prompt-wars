@@ -13,6 +13,13 @@ import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, TOK
 import { Transaction, PublicKey, SystemProgram } from "@solana/web3.js"
 import * as anchor from "@coral-xyz/anchor"
 
+// Mock helpers: when NEXT_PUBLIC_MOCK_BLOCKCHAIN is 'true', use deterministic local stubs
+const IS_MOCK = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_MOCK_BLOCKCHAIN === 'true';
+
+// Import mock send/confirm functions from repo-level mocks when available
+// Note: relative path up to repo root
+import { sendRawTransaction as mockSendRawTransaction, confirmTransaction as mockConfirmTransaction } from '../../../blockchain-mocks/solana';
+
 interface PredictionMarketProps {
   market?: any
   agentId: string
@@ -86,18 +93,32 @@ export function PredictionMarket({ market: legacyMarket, agentId: _agentId, mark
     let needsTransaction = false
 
     let collateralAccountExists = false
-    try {
-      await getAccount(connection, userCollateralAccount)
-      console.log("Collateral account exists")
-      collateralAccountExists = true
-    } catch (error) {
-      console.log("Creating collateral account")
+    if (!IS_MOCK) {
+      try {
+        await getAccount(connection, userCollateralAccount)
+        console.log("Collateral account exists")
+        collateralAccountExists = true
+      } catch (error) {
+        console.log("Creating collateral account")
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey, // payer
+            userCollateralAccount, // ata
+            publicKey, // owner
+            collateralMint // mint
+          )
+        )
+        needsTransaction = true
+      }
+    } else {
+      // In mock mode, assume accounts don't exist so we exercise the create flow without network calls
+      collateralAccountExists = false
       transaction.add(
         createAssociatedTokenAccountInstruction(
-          publicKey, // payer
-          userCollateralAccount, // ata
-          publicKey, // owner
-          collateralMint // mint
+          publicKey,
+          userCollateralAccount,
+          publicKey,
+          collateralMint
         )
       )
       needsTransaction = true
@@ -120,33 +141,57 @@ export function PredictionMarket({ market: legacyMarket, agentId: _agentId, mark
     transaction.add(createSyncNativeInstruction(userCollateralAccount))
     needsTransaction = true
 
-    try {
-      await getAccount(connection, userYesAccount)
-      console.log("YES account exists")
-    } catch (error) {
-      console.log("Creating YES account")
+    if (!IS_MOCK) {
+      try {
+        await getAccount(connection, userYesAccount)
+        console.log("YES account exists")
+      } catch (error) {
+        console.log("Creating YES account")
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey, // payer
+            userYesAccount, // ata
+            publicKey, // owner
+            yesMint // mint
+          )
+        )
+        needsTransaction = true
+      }
+    } else {
       transaction.add(
         createAssociatedTokenAccountInstruction(
-          publicKey, // payer
-          userYesAccount, // ata
-          publicKey, // owner
-          yesMint // mint
+          publicKey,
+          userYesAccount,
+          publicKey,
+          yesMint
         )
       )
       needsTransaction = true
     }
 
-    try {
-      await getAccount(connection, userNoAccount)
-      console.log("NO account exists")
-    } catch (error) {
-      console.log("Creating NO account")
+    if (!IS_MOCK) {
+      try {
+        await getAccount(connection, userNoAccount)
+        console.log("NO account exists")
+      } catch (error) {
+        console.log("Creating NO account")
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey, // payer
+            userNoAccount, // ata
+            publicKey, // owner
+            noMint // mint
+          )
+        )
+        needsTransaction = true
+      }
+    } else {
       transaction.add(
         createAssociatedTokenAccountInstruction(
-          publicKey, // payer
-          userNoAccount, // ata
-          publicKey, // owner
-          noMint // mint
+          publicKey,
+          userNoAccount,
+          publicKey,
+          noMint
         )
       )
       needsTransaction = true
@@ -168,49 +213,60 @@ export function PredictionMarket({ market: legacyMarket, agentId: _agentId, mark
     if (needsTransaction) {
       console.log("Creating missing token accounts...")
       try {
-        const { blockhash } = await connection.getLatestBlockhash()
-        transaction.recentBlockhash = blockhash
-        transaction.feePayer = publicKey
-        
-        const signedTx = await signTransaction(transaction)
-        const txSig = await connection.sendRawTransaction(signedTx.serialize())
-        await connection.confirmTransaction(txSig, 'confirmed')
-        console.log("Token accounts created successfully:", txSig)
-      } catch (createError) {
-        console.error("Failed to create token accounts:", createError)
-        throw new Error(`Failed to create token accounts: ${createError.message}`)
-      }
-    }
-    
-    try {
-      // Attempt real blockchain transaction
-      const txSignature = await buyTokens(connection, wallet, {
-        marketPda,
-        amount: new anchor.BN(amount * 1e9), // Convert to lamports
-        outcome,
-        userCollateralAccount,
-        userYesAccount,
-        userNoAccount
-      })
+        // Use mock blockhash & send when in mock mode to avoid network
+        if (IS_MOCK) {
+          transaction.recentBlockhash = 'mock_blockhash'
+          transaction.feePayer = publicKey
+          const signedTx = await signTransaction(transaction)
+          const txSig = await mockSendRawTransaction(signedTx.serialize(), { delayMs: 50 })
+          const confirmed = await mockConfirmTransaction(txSig)
+          if (!confirmed.confirmed) throw new Error('Mock transaction failed')
+          console.log("Token accounts created successfully (mock):", txSig)
+        } else {
+          const { blockhash } = await connection.getLatestBlockhash()
+          transaction.recentBlockhash = blockhash
+          transaction.feePayer = publicKey
++
+          const signedTx = await signTransaction(transaction)
+          const txSig = await connection.sendRawTransaction(signedTx.serialize())
+          await connection.confirmTransaction(txSig, 'confirmed')
+          console.log("Token accounts created successfully:", txSig)
+        }
+       } catch (createError) {
+         console.error("Failed to create token accounts:", createError)
+         throw new Error(`Failed to create token accounts: ${createError.message}`)
+       }
+     }
+     
+     try {
+       // Attempt real blockchain transaction
+       const txSignature = await buyTokens(connection, wallet, {
+         marketPda,
+         amount: new anchor.BN(amount * 1e9), // Convert to lamports
+         outcome,
+         userCollateralAccount,
+         userYesAccount,
+         userNoAccount
+       })
 
-      return txSignature
-    } catch (error) {
-      console.error("Blockchain transaction failed:", error)
-      
-      // If the blockchain transaction fails, we'll simulate it for now
-      // This could happen if the market isn't properly initialized on-chain
-      console.log("Falling back to simulated transaction")
-      
-      const txSignature = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-      
-      // Add a small delay to simulate network transaction
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      throw error // Re-throw the error so the caller knows it was simulated
-    }
-  }
+       return txSignature
+     } catch (error) {
+       console.error("Blockchain transaction failed:", error)
+       
+       // If the blockchain transaction fails, we'll simulate it for now
+       // This could happen if the market isn't properly initialized on-chain
+       console.log("Falling back to simulated transaction")
+       
+       const txSignature = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+         .map(b => b.toString(16).padStart(2, '0'))
+         .join('')
+       
+       // Add a small delay to simulate network transaction
+       await new Promise(resolve => setTimeout(resolve, 1000))
+       
+       throw error // Re-throw the error so the caller knows it was simulated
+     }
+   }
 
   useEffect(() => {
     if (!dbMarketId) return

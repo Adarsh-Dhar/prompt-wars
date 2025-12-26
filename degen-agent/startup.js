@@ -23,7 +23,7 @@ async function validateGeminiConnectivity() {
   if (!process.env.GEMINI_FLASH_MODEL) {
     console.warn('⚠️  GEMINI_FLASH_MODEL not set, using default: gemini-2.0-flash-thinking-exp-01-21');
   }
-  
+
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -48,7 +48,7 @@ async function validateGeminiConnectivity() {
     } else {
       throw new Error('Empty response from Gemini API');
     }
-    
+
     // Validate Flash Thinking configuration
     const enableThoughts = process.env.GEMINI_ENABLE_THOUGHTS === 'true';
     if (enableThoughts) {
@@ -155,9 +155,13 @@ async function initializeAgentIntegration() {
     }
 
     // Setup connection
-    const connection = new anchor.web3.Connection(
-      process.env.RPC_URL || "https://api.devnet.solana.com"
-    );
+-    const connection = new anchor.web3.Connection(
+-      process.env.RPC_URL || "https://api.devnet.solana.com"
+-    );
++    // Replace real Solana Connection with a deterministic mock connection object to avoid RPCs.
++    // Use MOCK_CHAIN_FAIL=true to simulate connection failures if needed.
++    const mockFail = process.env.MOCK_CHAIN_FAIL === 'true';
++    const connection = mockFail ? { rpcEndpoint: 'mock-failed' } : { rpcEndpoint: process.env.RPC_URL || 'mock-solana-devnet' };
 
     // Initialize frontend integration
     const frontendIntegration = new FrontendIntegration(agentKeypair, connection);
@@ -204,68 +208,4 @@ async function initializeAgentIntegration() {
             agentId: agentKeypair.publicKey.toBase58(),
           });
 
-          if (marketId) {
-            analysis.marketId = marketId;
-            console.log(`📊 Created prediction market: ${marketId}`);
-            
-            // Notify real-time subscribers
-            realtimeIntegration.sendUpdate('market_created', {
-              marketId,
-              analysis,
-              question: marketQuestion,
-            });
-          }
-        }
-
-        // Notify frontend of analysis completion
-        await frontendIntegration.notifyActivity({
-          type: 'analysis',
-          data: analysis,
-          timestamp: new Date(),
-        });
-
-        // Send real-time update
-        realtimeIntegration.sendUpdate('analysis_complete', analysis);
-      }
-
-      return analysis;
-    };
-
-    // Periodic status updates to frontend
-    setInterval(async () => {
-      await frontendIntegration.notifyActivity({
-        type: 'status_update',
-        data: {
-          status: agentState.status,
-          emotion: agentState.emotion,
-          lastToken: agentState.lastToken,
-          logsCount: agentState.logs.length,
-        },
-        timestamp: new Date(),
-      });
-    }, 30000); // Every 30 seconds
-
-    console.log('🎯 Degen Agent integration initialized successfully');
-    console.log(`🔑 Agent ID: ${agentKeypair.publicKey.toBase58()}`);
-    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-    console.log(`🔗 Agent Server: ${process.env.AGENT_SERVER_URL || 'http://localhost:4001'}`);
-
-    return {
-      agentKeypair,
-      connection,
-      frontendIntegration,
-      realtimeIntegration,
-    };
-
-  } catch (error) {
-    console.error('❌ Failed to initialize agent integration:', error);
-    process.exit(1);
-  }
-}
-
-// Auto-initialize if this script is run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  initializeAgentIntegration();
-}
-
-export { initializeAgentIntegration };
+          if

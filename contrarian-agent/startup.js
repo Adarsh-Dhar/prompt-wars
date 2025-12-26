@@ -21,9 +21,9 @@ async function initializeAgentIntegration() {
     }
 
     // Setup connection
-    const connection = new anchor.web3.Connection(
-      process.env.RPC_URL || "https://api.devnet.solana.com"
-    );
+    // Use a mock connection object to avoid any real network calls or transactions.
+    const mockFail = process.env.MOCK_CHAIN_FAIL === 'true';
+    const connection = mockFail ? { rpcEndpoint: 'mock-failed' } : { rpcEndpoint: process.env.RPC_URL || 'mock-solana-devnet' };
 
     // Wait for agent instance to be ready
     let retries = 0;

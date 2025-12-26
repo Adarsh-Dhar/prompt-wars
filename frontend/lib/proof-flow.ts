@@ -9,6 +9,10 @@ import { fetchAgentProof } from "./agent-server"
 
 const AGENT_SERVER_URL = process.env.NEXT_PUBLIC_AGENT_SERVER_URL || 'http://localhost:4001'
 
+// Mock guard
+const IS_MOCK = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_MOCK_BLOCKCHAIN === 'true';
+import { confirmTransaction as mockConfirmTransaction } from '../../../blockchain-mocks/solana';
+
 /**
  * Convert hex string to Uint8Array
  */
@@ -117,7 +121,11 @@ export async function requestProofFlow(
   console.log("[PROOF FLOW] Proof requested, signature:", requestSig)
 
   // Wait for transaction confirmation
-  await connection.confirmTransaction(requestSig, "confirmed")
+  if (IS_MOCK) {
+    await mockConfirmTransaction(requestSig)
+  } else {
+    await connection.confirmTransaction(requestSig, "confirmed")
+  }
   console.log("[PROOF FLOW] Request transaction confirmed")
 
   // Step 2: Fetch agent info and proof from agent server
@@ -177,7 +185,11 @@ export async function requestProofFlow(
   console.log("[PROOF FLOW] Proof submitted, signature:", submitSig)
 
   // Wait for transaction confirmation
-  await connection.confirmTransaction(submitSig, "confirmed")
+  if (IS_MOCK) {
+    await mockConfirmTransaction(submitSig)
+  } else {
+    await connection.confirmTransaction(submitSig, "confirmed")
+  }
   console.log("[PROOF FLOW] Submit transaction confirmed")
 
   return {

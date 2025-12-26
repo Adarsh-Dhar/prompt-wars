@@ -4,6 +4,8 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as anchor from '@coral-xyz/anchor';
+// Use mock Solana module to avoid real RPC calls
+import { sendSolanaTransaction, confirmSolanaTransaction } from '../blockchain-mocks/solana.js';
 import crypto from 'crypto';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
@@ -41,7 +43,8 @@ app.use(cors({
 app.use(express.json());
 
 // Solana configuration - default to devnet to avoid mainnet mismatches
-const connection = new anchor.web3.Connection(process.env.RPC_URL || "https://api.devnet.solana.com");
+// connection object is no longer used for real RPCs; mock functions handle blockchain interactions
+const connection = { rpcEndpoint: process.env.RPC_URL || "https://api.devnet.solana.com" };
 const SERVER_WALLET = process.env.SERVER_WALLET || "YOUR_RECEIVING_WALLET_ADDRESS";
 const PRICE_SOL = parseFloat(process.env.PRICE_SOL || "0.001");
 const PEEK_PRICE = 0.05; // Price for unlocking analysis
@@ -341,32 +344,14 @@ async function verifyPayment(signature, requiredAmount, expectedMemo = null) {
             return { valid: false, error: 'Invalid signature format' };
         }
 
-        // Get transaction details
-        const transaction = await connection.getTransaction(signature, {
-            commitment: 'confirmed',
-            maxSupportedTransactionVersion: 0
-        });
-
-        if (!transaction) {
-            return { valid: false, error: 'Transaction not found' };
+        // Use mock solana transaction lookup to avoid network calls
+        const txResult = await confirmSolanaTransaction(signature);
+        if (!txResult.confirmed) {
+            return { valid: false, error: 'Transaction not found or not confirmed (mock)' };
         }
 
-        if (transaction.meta?.err) {
-            return { valid: false, error: 'Transaction failed' };
-        }
-
-        // Verify payment amount and recipient
-        const preBalances = transaction.meta.preBalances;
-        const postBalances = transaction.meta.postBalances;
-        
-        // Simple verification - in production, you'd want more robust checks
-        const amountTransferred = Math.abs(preBalances[0] - postBalances[0]) / anchor.web3.LAMPORTS_PER_SOL;
-        
-        if (amountTransferred >= requiredAmount) {
-            return { valid: true, amount: amountTransferred };
-        }
-
-        return { valid: false, error: `Insufficient payment: ${amountTransferred} SOL < ${requiredAmount} SOL` };
+        // In the mock world, assume payment is always exactly the requiredAmount for success
+        return { valid: true, amount: requiredAmount };
     } catch (error) {
         console.error('Payment verification error:', error);
         return { valid: false, error: 'Payment verification failed' };
