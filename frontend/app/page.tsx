@@ -2,13 +2,50 @@ import Link from "next/link"
 import { ArrowRight, Zap, Eye, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FeaturedArenaCard } from "@/components/featured-arena-card"
+import { db } from "@/lib/db"
+import { getPrices } from "@/lib/solana/amm"
 
 async function getStats() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
-    const res = await fetch(`${baseUrl}/api/stats`, { cache: "no-store" })
-    if (!res.ok) throw new Error("Failed to fetch stats")
-    return await res.json()
+    // Get total volume from all markets
+    const markets = await db.market.findMany({
+      select: {
+        totalVolume: true,
+      },
+    })
+
+    const totalVolume = markets.reduce((sum, market) => sum + Number(market.totalVolume), 0)
+
+    // Get active viewers (users with active bets)
+    const activeBets = await db.bet.findMany({
+      where: {
+        status: "ACTIVE",
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ["userId"],
+    })
+    const activeViewers = activeBets.length
+
+    // Get completed missions
+    const missionsComplete = await db.mission.count({
+      where: {
+        status: "COMPLETED",
+      },
+    })
+
+    // Get registered agents
+    const registeredAgents = await db.agent.count()
+
+    return {
+      stats: {
+        totalVolume,
+        activeViewers,
+        missionsComplete,
+        registeredAgents,
+      },
+    }
   } catch (error) {
     console.error("Error fetching stats:", error)
     return {
@@ -24,11 +61,48 @@ async function getStats() {
 
 async function getFeaturedMarkets() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
-    const res = await fetch(`${baseUrl}/api/markets?status=ACTIVE&limit=3`, { cache: "no-store" })
-    if (!res.ok) throw new Error("Failed to fetch markets")
-    const data = await res.json()
-    return data.markets || []
+    const markets = await db.market.findMany({
+      where: {
+        mission: {
+          status: "ACTIVE",
+        },
+      },
+      include: {
+        mission: {
+          include: {
+            agent: {
+              include: {
+                stats: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 3,
+    })
+
+    // Calculate odds from current prices
+    return markets.map((market) => {
+      const reserveYes = Number(market.reserveYes || 0)
+      const reserveNo = Number(market.reserveNo || 0)
+      const { priceYes, priceNo } = getPrices(reserveYes, reserveNo)
+      const moonOdds = priceYes * 100
+      const rugOdds = priceNo * 100
+      return {
+        ...market,
+        odds: {
+          moon: Math.round(moonOdds),
+          rug: Math.round(rugOdds),
+        },
+        totalVolume: Number(market.totalVolume),
+        liquidity: Number(market.liquidity),
+        reserveYes,
+        reserveNo,
+      }
+    })
   } catch (error) {
     console.error("Error fetching markets:", error)
     return []

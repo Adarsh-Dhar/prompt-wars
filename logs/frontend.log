@@ -163,3 +163,373 @@ Error fetching markets: Error: Failed to fetch markets
   32 |   } catch (error) {
  GET / 200 in 2.5s (compile: 1428ms, render: 1057ms)
  PUT /api/agents/contrarian-agent-1766808889142/status 404 in 94ms (compile: 47ms, render: 46ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 70ms (compile: 28ms, render: 42ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 68ms (compile: 29ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 64ms (compile: 24ms, render: 40ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 78ms (compile: 39ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 84ms (compile: 30ms, render: 53ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 69ms (compile: 29ms, render: 39ms)
+ GET /api/worker/config?hostname=test-cloudflare-website.adarsh.software 404 in 63ms (compile: 27ms, render: 36ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 70ms (compile: 26ms, render: 44ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 68ms (compile: 30ms, render: 37ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 71ms (compile: 33ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 84ms (compile: 28ms, render: 56ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/stats/route.ts:7:21)
+   5 |   try {
+   6 |     // Get total volume from all markets
+>  7 |     const markets = await db.market.findMany({
+     |                     ^
+   8 |       select: {
+   9 |         totalVolume: true,
+  10 |       }, {
+  clientVersion: '7.1.0'
+}
+ GET /api/stats 500 in 200ms (compile: 3ms, render: 198ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/markets/route.ts:28:21)
+  26 |     }
+  27 |
+> 28 |     const markets = await db.market.findMany({
+     |                     ^
+  29 |       where,
+  30 |       include: {
+  31 |         mission: { {
+  clientVersion: '7.1.0'
+}
+Error details: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async PrismaPgAdapter.performIO (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20203:28)
+    at async PrismaPgAdapter.queryRaw (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20155:34)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24163
+    at async fr (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24002)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:42384)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41603)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:43982)
+    at async e.run (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41223)
+    at async e.execute (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:57:682)
+    at async Dt.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:58:2186)
+    at async Object.singleLoader (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:6569)
+    at async qr.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:7061)
+    at async a (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:75:5816)
+    at async GET (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/[root-of-the-server]__bfbd5906._.js:479:25)
+    at async AppRouteRouteModule.do (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:37789)
+    at async AppRouteRouteModule.handle (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:45045)
+    at async responseGenerator (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14339:38)
+    at async AppRouteRouteModule.handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:187851)
+    at async handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14401:32)
+    at async handler (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14454:13)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1413:9)
+    at async DevServer.renderPageComponent (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1465:24)
+    at async DevServer.renderToResponseImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1515:32)
+    at async DevServer.pipeImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1021:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/next-server.js:394:17)
+    at async DevServer.handleRequestImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:912:17)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:382:20
+    at async Span.traceAsyncFn (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/trace/trace.js:157:20)
+    at async DevServer.handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:378:24)
+    at async invokeRender (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:240:21)
+    at async handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:436:24)
+    at async requestHandlerImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:484:13)
+    at async Server.requestListener (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/start-server.js:226:13)
+ GET /api/markets?status=ACTIVE&limit=3 500 in 328ms (compile: 23ms, render: 305ms)
+Error fetching stats: Error: Failed to fetch stats
+    at getStats (app/page.tsx:10:24)
+    at async HomePage (app/page.tsx:39:36)
+   8 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+   9 |     const res = await fetch(`${baseUrl}/api/stats`, { cache: "no-store" })
+> 10 |     if (!res.ok) throw new Error("Failed to fetch stats")
+     |                        ^
+  11 |     return await res.json()
+  12 |   } catch (error) {
+  13 |     console.error("Error fetching stats:", error)
+Error fetching markets: Error: Failed to fetch markets
+    at getFeaturedMarkets (app/page.tsx:29:24)
+    at async HomePage (app/page.tsx:39:36)
+  27 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+  28 |     const res = await fetch(`${baseUrl}/api/markets?status=ACTIVE&limit=3`, { cache: "no-store" })
+> 29 |     if (!res.ok) throw new Error("Failed to fetch markets")
+     |                        ^
+  30 |     const data = await res.json()
+  31 |     return data.markets || []
+  32 |   } catch (error) {
+ GET / 200 in 483ms (compile: 82ms, render: 401ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 76ms (compile: 38ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 78ms (compile: 31ms, render: 47ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 65ms (compile: 26ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 63ms (compile: 24ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 69ms (compile: 27ms, render: 42ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 73ms (compile: 29ms, render: 44ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 112ms (compile: 45ms, render: 67ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 324ms (compile: 169ms, render: 154ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 84ms (compile: 33ms, render: 52ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 63ms (compile: 26ms, render: 37ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 69ms (compile: 24ms, render: 45ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 82ms (compile: 25ms, render: 57ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 182ms (compile: 40ms, render: 143ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 90ms (compile: 42ms, render: 48ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 71ms (compile: 31ms, render: 40ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 77ms (compile: 38ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 62ms (compile: 26ms, render: 37ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 90ms (compile: 34ms, render: 56ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 74ms (compile: 24ms, render: 49ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 70ms (compile: 30ms, render: 41ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 61ms (compile: 24ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 86ms (compile: 33ms, render: 53ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 65ms (compile: 26ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 81ms (compile: 38ms, render: 43ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 76ms (compile: 25ms, render: 51ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 149ms (compile: 104ms, render: 45ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 64ms (compile: 24ms, render: 40ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 96ms (compile: 46ms, render: 50ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 97ms (compile: 44ms, render: 53ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 75ms (compile: 32ms, render: 43ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 113ms (compile: 40ms, render: 73ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 110ms (compile: 31ms, render: 78ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 72ms (compile: 30ms, render: 42ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 65ms (compile: 27ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 76ms (compile: 26ms, render: 50ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 61ms (compile: 24ms, render: 37ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 80ms (compile: 28ms, render: 52ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 74ms (compile: 33ms, render: 40ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 64ms (compile: 26ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 61ms (compile: 24ms, render: 37ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 82ms (compile: 42ms, render: 39ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 70ms (compile: 23ms, render: 47ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 60ms (compile: 23ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 71ms (compile: 22ms, render: 49ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 86ms (compile: 50ms, render: 36ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 79ms (compile: 36ms, render: 43ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 98ms (compile: 26ms, render: 72ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 56ms (compile: 18ms, render: 38ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 77ms (compile: 31ms, render: 46ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/markets/route.ts:28:21)
+  26 |     }
+  27 |
+> 28 |     const markets = await db.market.findMany({
+     |                     ^
+  29 |       where,
+  30 |       include: {
+  31 |         mission: { {
+  clientVersion: '7.1.0'
+}
+Error details: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async PrismaPgAdapter.performIO (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20203:28)
+    at async PrismaPgAdapter.queryRaw (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20155:34)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24163
+    at async fr (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24002)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:42384)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41603)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:43982)
+    at async e.run (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41223)
+    at async e.execute (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:57:682)
+    at async Dt.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:58:2186)
+    at async Object.singleLoader (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:6569)
+    at async qr.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:7061)
+    at async a (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:75:5816)
+    at async GET (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/[root-of-the-server]__bfbd5906._.js:479:25)
+    at async AppRouteRouteModule.do (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:37789)
+    at async AppRouteRouteModule.handle (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:45045)
+    at async responseGenerator (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14339:38)
+    at async AppRouteRouteModule.handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:187851)
+    at async handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14401:32)
+    at async handler (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14454:13)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1413:9)
+    at async DevServer.renderPageComponent (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1465:24)
+    at async DevServer.renderToResponseImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1515:32)
+    at async DevServer.pipeImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1021:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/next-server.js:394:17)
+    at async DevServer.handleRequestImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:912:17)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:382:20
+    at async Span.traceAsyncFn (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/trace/trace.js:157:20)
+    at async DevServer.handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:378:24)
+    at async invokeRender (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:240:21)
+    at async handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:436:24)
+    at async requestHandlerImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:484:13)
+    at async Server.requestListener (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/start-server.js:226:13)
+ GET /api/markets?status=ACTIVE&limit=3 500 in 262ms (compile: 33ms, render: 229ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/stats/route.ts:7:21)
+   5 |   try {
+   6 |     // Get total volume from all markets
+>  7 |     const markets = await db.market.findMany({
+     |                     ^
+   8 |       select: {
+   9 |         totalVolume: true,
+  10 |       }, {
+  clientVersion: '7.1.0'
+}
+ GET /api/stats 500 in 367ms (compile: 5ms, render: 362ms)
+Error fetching markets: Error: Failed to fetch markets
+    at getFeaturedMarkets (app/page.tsx:29:24)
+    at async HomePage (app/page.tsx:39:36)
+  27 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+  28 |     const res = await fetch(`${baseUrl}/api/markets?status=ACTIVE&limit=3`, { cache: "no-store" })
+> 29 |     if (!res.ok) throw new Error("Failed to fetch markets")
+     |                        ^
+  30 |     const data = await res.json()
+  31 |     return data.markets || []
+  32 |   } catch (error) {
+Error fetching stats: Error: Failed to fetch stats
+    at getStats (app/page.tsx:10:24)
+    at async HomePage (app/page.tsx:39:36)
+   8 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+   9 |     const res = await fetch(`${baseUrl}/api/stats`, { cache: "no-store" })
+> 10 |     if (!res.ok) throw new Error("Failed to fetch stats")
+     |                        ^
+  11 |     return await res.json()
+  12 |   } catch (error) {
+  13 |     console.error("Error fetching stats:", error)
+ GET / 200 in 539ms (compile: 72ms, render: 467ms)
+ GET /index.iife.min.js.map 404 in 300ms (compile: 140ms, render: 160ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 47s (compile: 2.4s, render: 45s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 73s (compile: 3.1s, render: 70s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 44s (compile: 3.7s, render: 41s)
+ ✓ Compiled in 231.1s
+ ○ Compiling /arena ...
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getFeaturedMarkets (app/page.tsx:64:21)
+    at async HomePage (app/page.tsx:113:36)
+  62 | async function getFeaturedMarkets() {
+  63 |   try {
+> 64 |     const markets = await db.market.findMany({
+     |                     ^
+  65 |       where: {
+  66 |         mission: {
+  67 |           status: "ACTIVE", {
+  clientVersion: '7.1.0'
+}
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getStats (app/page.tsx:11:21)
+    at async HomePage (app/page.tsx:113:36)
+   9 |   try {
+  10 |     // Get total volume from all markets
+> 11 |     const markets = await db.market.findMany({
+     |                     ^
+  12 |       select: {
+  13 |         totalVolume: true,
+  14 |       }, {
+  clientVersion: '7.1.0'
+}
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 116s (compile: 3.1s, render: 113s)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching arenas: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/arena/route.ts:21:20)
+  19 |     }
+  20 |
+> 21 |     const agents = await db.agent.findMany({
+     |                    ^
+  22 |       where,
+  23 |       include: {
+  24 |         missions: { {
+  clientVersion: '7.1.0'
+}
+ GET /api/arena 500 in 33.9s (compile: 2.5s, render: 31.4s)
+Error fetching arenas: Error: Failed to fetch arenas
+    at getArenas (app/arena/page.tsx:19:24)
+    at async ArenaPage (app/arena/page.tsx:86:18)
+  17 |       },
+  18 |     })
+> 19 |     if (!res.ok) throw new Error("Failed to fetch arenas")
+     |                        ^
+  20 |     const data = await res.json()
+  21 |     return data.arenas || []
+  22 |   } catch (error) {
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching arenas: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/arena/route.ts:21:20)
+  19 |     }
+  20 |
+> 21 |     const agents = await db.agent.findMany({
+     |                    ^
+  22 |       where,
+  23 |       include: {
+  24 |         missions: { {
+  clientVersion: '7.1.0'
+}
+ GET /api/arena 500 in 33.0s (compile: 14.4s, render: 18.6s)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching arenas: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/arena/route.ts:21:20)
+  19 |     }
+  20 |
+> 21 |     const agents = await db.agent.findMany({
+     |                    ^
+  22 |       where,
+  23 |       include: {
+  24 |         missions: { {
+  clientVersion: '7.1.0'
+}
+ GET /api/arena 500 in 15.0s (compile: 2.5s, render: 12.5s)
+Error fetching arenas: Error: Failed to fetch arenas
+    at getArenas (app/arena/page.tsx:19:24)
+    at async ArenaPage (app/arena/page.tsx:86:18)
+  17 |       },
+  18 |     })
+> 19 |     if (!res.ok) throw new Error("Failed to fetch arenas")
+     |                        ^
+  20 |     const data = await res.json()
+  21 |     return data.arenas || []
+  22 |   } catch (error) {
+Error fetching arenas: Error: Failed to fetch arenas
+    at getArenas (app/arena/page.tsx:19:24)
+    at async ArenaPage (app/arena/page.tsx:86:18)
+  17 |       },
+  18 |     })
+> 19 |     if (!res.ok) throw new Error("Failed to fetch arenas")
+     |                        ^
+  20 |     const data = await res.json()
+  21 |     return data.arenas || []
+  22 |   } catch (error) {
+ GET / 200 in 91s (compile: 2.6s, render: 88s)
+ GET /arena 200 in 86s (compile: 3.4s, render: 83s)
+ GET /arena 200 in 71s (compile: 2.8s, render: 68s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 94s (compile: 7.7s, render: 86s)
+ ⚠ Server is approaching the used memory threshold, restarting...
+   ▲ Next.js 16.0.7 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.101:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 686ms
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 3.4s (compile: 3.1s, render: 302ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 71ms (compile: 24ms, render: 46ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getFeaturedMarkets (app/page.tsx:64:21)
+    at async HomePage (app/page.tsx:113:36)
+  62 | async function getFeaturedMarkets() {
+  63 |   try {
+> 64 |     const markets = await db.market.findMany({
+     |                     ^
+  65 |       where: {
+  66 |         mission: {
+  67 |           status: "ACTIVE", {
+  clientVersion: '7.1.0'
+}
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getStats (app/page.tsx:11:21)
+    at async HomePage (app/page.tsx:113:36)
+   9 |   try {
+  10 |     // Get total volume from all markets
+> 11 |     const markets = await db.market.findMany({
+     |                     ^
+  12 |       select: {
+  13 |         totalVolume: true,
+  14 |       }, {
+  clientVersion: '7.1.0'
+}
+ GET / 200 in 1950ms (compile: 1474ms, render: 476ms)
+ GET /index.iife.min.js.map 404 in 516ms (compile: 75ms, render: 442ms)

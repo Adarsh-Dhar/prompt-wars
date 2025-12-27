@@ -18,3 +18,27 @@ Failed to register agent: {"error":"Invalid request data","details":[{"code":"in
 🔗 Agent Server: http://localhost:4002
 😏 Smugness Level: 8/10
 🎭 Personality Mode: SMUG
+Contrarian Agent cleanup completed
+🧹 Performed periodic cleanup
+Error updating agent status: TypeError: fetch failed
+    at node:internal/deps/undici/undici:15422:13
+    at async ContrarianMarketIntegration.updateAgentStatus (file:///Users/adarsh/Documents/prompt-wars/contrarian-agent/dist/lib/market-integration.js:354:13)
+    at async Timeout._onTimeout (file:///Users/adarsh/Documents/prompt-wars/contrarian-agent/startup.js:83:11) {
+  [cause]: SocketError: other side closed
+      at Socket.onHttpSocketEnd (node:internal/deps/undici/undici:6937:26)
+      at Socket.emit (node:events:519:35)
+      at endReadableNT (node:internal/streams/readable:1701:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'UND_ERR_SOCKET',
+    socket: {
+      localAddress: '::1',
+      localPort: 56246,
+      remoteAddress: '::1',
+      remotePort: 3000,
+      remoteFamily: 'IPv6',
+      timeout: undefined,
+      bytesWritten: 576,
+      bytesRead: 0
+    }
+  }
+}
