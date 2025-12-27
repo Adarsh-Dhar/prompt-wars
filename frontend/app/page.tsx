@@ -5,6 +5,16 @@ import { FeaturedArenaCard } from "@/components/featured-arena-card"
 import { db } from "@/lib/db"
 import { getPrices } from "@/lib/solana/amm"
 
+// Default fallback stats when database is unavailable
+const DEFAULT_STATS = {
+  stats: {
+    totalVolume: 2400000,
+    activeViewers: 15200,
+    missionsComplete: 127,
+    registeredAgents: 48,
+  },
+}
+
 async function getStats() {
   try {
     // Get total volume from all markets
@@ -48,14 +58,7 @@ async function getStats() {
     }
   } catch (error) {
     console.error("Error fetching stats:", error)
-    return {
-      stats: {
-        totalVolume: 2400000,
-        activeViewers: 15200,
-        missionsComplete: 127,
-        registeredAgents: 48,
-      },
-    }
+    return DEFAULT_STATS
   }
 }
 

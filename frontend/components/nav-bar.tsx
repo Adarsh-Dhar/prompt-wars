@@ -1,51 +1,29 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
-import { Wallet, LogOut } from "lucide-react"
+import { Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useWallet, useConnection } from "@solana/wallet-adapter-react"
-import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import * as anchor from "@coral-xyz/anchor";
+import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { useAccount, useBalance } from "wagmi"
 
 export function NavBar() {
-  const { publicKey, disconnect, connected } = useWallet()
-  const { connection } = useConnection()
-  const { setVisible } = useWalletModal()
-  const [balance, setBalance] = useState<number | null>(null)
+  const { address, isConnected } = useAccount()
+  const { data: balanceData } = useBalance({
+    address,
+    query: { enabled: !!address },
+  })
 
-  useEffect(() => {
-    if (connected && publicKey) {
-      // Fetch balance
-      connection.getBalance(publicKey).then((bal) => {
-        setBalance(bal / anchor.web3.LAMPORTS_PER_SOL)
-      })
+  const formattedBalance = useMemo(() => {
+    if (!balanceData) return null
+    const value = Number(balanceData.value) / 10 ** balanceData.decimals
+    return `${value.toFixed(4)} ${balanceData.symbol}`
+  }, [balanceData])
 
-      // Subscribe to balance changes
-      const subscriptionId = connection.onAccountChange(publicKey, (accountInfo) => {
-        setBalance(accountInfo.lamports / anchor.web3.LAMPORTS_PER_SOL)
-      })
-
-      return () => {
-        connection.removeAccountChangeListener(subscriptionId)
-      }
-    } else {
-      setBalance(null)
-    }
-  }, [connected, publicKey, connection])
-
-  const formatWallet = (address: string) => {
-    if (!address) return ""
-    if (address.length <= 10) return address
-    return `${address.slice(0, 4)}...${address.slice(-4)}`
-  }
-
-  const handleConnect = () => {
-    setVisible(true)
-  }
-
-  const handleDisconnect = () => {
-    disconnect()
+  const formatWallet = (addr?: string) => {
+    if (!addr) return ""
+    if (addr.length <= 10) return addr
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
   return (
@@ -76,38 +54,26 @@ export function NavBar() {
 
         {/* Wallet */}
         <div className="flex items-center gap-4">
-          {connected && balance !== null && (
+          {isConnected && formattedBalance && (
             <div className="hidden items-center gap-2 rounded border border-border/50 bg-card px-3 py-1.5 sm:flex">
               <div className="h-2 w-2 animate-pulse rounded-full bg-[var(--neon-lime)]" />
               <span className="font-mono text-sm text-[var(--neon-lime)]">
-                {balance.toFixed(2)} SOL
+                {formattedBalance}
               </span>
             </div>
           )}
-          {connected && publicKey ? (
-            <div className="flex items-center gap-2">
-              <div className="hidden items-center gap-2 rounded border border-border/50 bg-card px-3 py-1.5 sm:flex">
-                <span className="font-mono text-xs text-foreground">
-                  {formatWallet(publicKey.toBase58())}
-                </span>
-              </div>
-              <Button
-                onClick={handleDisconnect}
-                className="neon-glow-cyan border border-[var(--neon-cyan)] bg-transparent font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/10"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Disconnect
+
+          {/* RainbowKit Connect Button */}
+          <div className="flex items-center gap-2">
+            <ConnectButton chainStatus="icon" accountStatus={{ smallScreen: "avatar", largeScreen: "full" }} />
+            {/* Optional legacy button styling retained for aesthetics */}
+            {!isConnected && (
+              <Button className="neon-glow-cyan border border-[var(--neon-cyan)] bg-transparent font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/10">
+                <Wallet className="mr-2 h-4 w-4" />
+                Connect Wallet
               </Button>
-            </div>
-          ) : (
-            <Button
-              onClick={handleConnect}
-              className="neon-glow-cyan border border-[var(--neon-cyan)] bg-transparent font-mono text-xs uppercase tracking-widest text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/10"
-            >
-              <Wallet className="mr-2 h-4 w-4" />
-              Connect Wallet
-            </Button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </nav>

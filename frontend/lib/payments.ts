@@ -2,7 +2,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { getSafeWalletAdapter } from './blockchain-adapter';
-import { confirmTransaction as mockConfirmTransaction } from '../../../blockchain-mocks/solana';
+import { confirmTransaction as mockConfirmTransaction } from '../../blockchain-mocks/solana';
 
 const IS_MOCK = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_MOCK_BLOCKCHAIN === 'true';
 

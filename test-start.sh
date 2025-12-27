@@ -4,10 +4,10 @@
 cd /Users/adarsh/Documents/prompt-wars/frontend
 
 # Set environment
-export DATABASE_URL="postgresql://localhost:5432/prompt_wars"
+export DATABASE_URL="postgresql://localhost:5437/prompt_wars"
 
 # Kill existing processes
-lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+lsof -ti:6000 | xargs kill -9 2>/dev/null || true
 
 # Generate Prisma
 echo "Generating Prisma client..."
@@ -16,4 +16,3 @@ npx prisma generate
 # Start dev server
 echo "Starting frontend..."
 pnpm run dev
-

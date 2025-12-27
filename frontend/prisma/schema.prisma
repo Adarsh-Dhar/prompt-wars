@@ -10,6 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // url is configured in prisma.config.ts (Prisma v7 requirement)
 }
 
 enum MissionStatus {

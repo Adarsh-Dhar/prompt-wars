@@ -106,7 +106,7 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 # Export DATABASE_URL for Prisma
-export DATABASE_URL="${DATABASE_URL:-postgresql://localhost:5432/prompt_wars}"
+export DATABASE_URL="${DATABASE_URL:-postgresql://localhost:5437/prompt_wars}"
 
 # Create logs directory
 mkdir -p "$ROOT_DIR/logs"

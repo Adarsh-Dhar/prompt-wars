@@ -21,7 +21,7 @@ pnpm install  # in each subdirectory
 
 # Option 2: Using npm/pnpm
 cd frontend
-DATABASE_URL="postgresql://localhost:5432/prompt_wars" pnpm run dev
+DATABASE_URL="postgresql://localhost:5437/prompt_wars" pnpm run dev
 ```
 
 ### 3. Start All Services
@@ -49,7 +49,7 @@ DATABASE_URL="postgresql://localhost:5432/prompt_wars" pnpm run dev
 
 ### Frontend (.env in frontend/)
 ```env
-DATABASE_URL="postgresql://localhost:5432/prompt_wars"
+DATABASE_URL="postgresql://localhost:5437/prompt_wars"
 NEXT_PUBLIC_MOCK_BLOCKCHAIN=true
 NEXT_PUBLIC_SERVER_WALLET="11111111111111111111111111111111"
 ```
@@ -66,7 +66,7 @@ SOLANA_PRIVATE_KEY=your_private_key_here
 ### Prisma Issues
 ```bash
 cd frontend
-DATABASE_URL="postgresql://localhost:5432/prompt_wars" npx prisma generate
+DATABASE_URL="postgresql://localhost:5437/prompt_wars" npx prisma generate
 ```
 
 ### Port Already in Use

@@ -533,3 +533,44 @@ Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password m
 }
  GET / 200 in 1950ms (compile: 1474ms, render: 476ms)
  GET /index.iife.min.js.map 404 in 516ms (compile: 75ms, render: 442ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 59s (compile: 8.1s, render: 50s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 47s (compile: 3.3s, render: 43s)
+   Reload env: .env
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getFeaturedMarkets (app/page.tsx:64:21)
+    at async HomePage (app/page.tsx:113:36)
+  62 | async function getFeaturedMarkets() {
+  63 |   try {
+> 64 |     const markets = await db.market.findMany({
+     |                     ^
+  65 |       where: {
+  66 |         mission: {
+  67 |           status: "ACTIVE", {
+  clientVersion: '7.1.0'
+}
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async getStats (app/page.tsx:11:21)
+    at async HomePage (app/page.tsx:113:36)
+   9 |   try {
+  10 |     // Get total volume from all markets
+> 11 |     const markets = await db.market.findMany({
+     |                     ^
+  12 |       select: {
+  13 |         totalVolume: true,
+  14 |       }, {
+  clientVersion: '7.1.0'
+}
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 62s (compile: 5.3s, render: 57s)
+ GET / 200 in 85s (compile: 1971ms, render: 83s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 72s (compile: 3.9s, render: 68s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 49s (compile: 5.1s, render: 44s)
+ GET /api/worker/config?hostname=test-cloudflare-website.adarsh.software 404 in 48s (compile: 4.6s, render: 43s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 51s (compile: 4.6s, render: 47s)
+ GET /api/worker/config?hostname=adarsh.software 404 in 52s (compile: 2.8s, render: 49s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 57s (compile: 4.1s, render: 53s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 64s (compile: 3.0s, render: 61s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 52s (compile: 3.0s, render: 49s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 46s (compile: 4.1s, render: 42s)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 50s (compile: 4.2s, render: 46s)

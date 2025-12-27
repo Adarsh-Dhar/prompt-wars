@@ -6,8 +6,8 @@
   "scripts": {
     "start": "./start-all.sh",
     "start:all": "./start-all.sh",
-    "dev": "DATABASE_URL=postgresql://localhost:5432/prompt_wars ./start-frontend.sh",
-    "frontend": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars pnpm run dev",
+    "dev": "DATABASE_URL=postgresql://localhost:5437/prompt_wars ./start-frontend.sh",
+    "frontend": "cd frontend && DATABASE_URL=postgresql://localhost:5437/prompt_wars pnpm run dev",
     "frontend:build": "cd frontend && pnpm run build",
     "agents": "./start-agents.sh",
     "install:all": "./install-all.sh",
@@ -16,12 +16,25 @@
     "clean": "rm -rf logs/*.log",
     "test:frontend": "cd frontend && pnpm test",
     "test:agents": "cd degen-agent && pnpm test && cd ../contrarian-agent && pnpm test",
-    "prisma:generate": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma generate",
-    "prisma:migrate": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma migrate dev",
-    "prisma:studio": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma studio"
+    "prisma:generate": "cd frontend && DATABASE_URL=postgresql://localhost:5437/prompt_wars npx prisma generate",
+    "prisma:migrate": "cd frontend && DATABASE_URL=postgresql://localhost:5437/prompt_wars npx prisma migrate dev",
+    "prisma:studio": "cd frontend && DATABASE_URL=postgresql://localhost:5437/prompt_wars npx prisma studio"
   },
-  "keywords": ["solana", "ai", "agents", "prompt-wars"],
+  "keywords": [
+    "solana",
+    "ai",
+    "agents",
+    "prompt-wars"
+  ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "packageManager": "pnpm@9.10.0+sha1.216899f511c8dfde183c7cb50b69009c779534a8",
+  "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.10",
+    "@reown/appkit": "^1.8.15",
+    "@reown/appkit-adapter-wagmi": "^1.8.15",
+    "@tanstack/react-query": "^5.90.12",
+    "viem": "^2.43.3",
+    "wagmi": "^3.1.3"
+  }
 }
-

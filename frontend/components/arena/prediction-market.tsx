@@ -226,7 +226,6 @@ export function PredictionMarket({ market: legacyMarket, agentId: _agentId, mark
           const { blockhash } = await connection.getLatestBlockhash()
           transaction.recentBlockhash = blockhash
           transaction.feePayer = publicKey
-+
           const signedTx = await signTransaction(transaction)
           const txSig = await connection.sendRawTransaction(signedTx.serialize())
           await connection.confirmTransaction(txSig, 'confirmed')
