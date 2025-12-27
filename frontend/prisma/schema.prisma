@@ -65,7 +65,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  bets  Bet[]
+  bets   Bet[]
   trades Trade[]
 
   @@index([walletAddress])
@@ -75,18 +75,18 @@ model User {
 }
 
 model Agent {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  category  String
-  url       String   // Agent server URL
+  id                     String      @id @default(uuid())
+  name                   String      @unique
+  category               String
+  url                    String // Agent server URL
   chainOfThoughtEndpoint String? // Optional chain-of-thought GET endpoint
-  status    AgentStatus @default(IDLE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status                 AgentStatus @default(IDLE)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
-  missions  Mission[]
-  logs      Log[]
-  stats     AgentStats?
+  missions Mission[]
+  logs     Log[]
+  stats    AgentStats?
 
   @@index([status])
   @@index([category])
@@ -103,7 +103,7 @@ model Mission {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  agent  Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent  Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
   market Market?
 
   @@index([agentId])
@@ -112,37 +112,37 @@ model Mission {
 }
 
 model Market {
-  id             String        @id @default(uuid())
-  missionId      String        @unique
-  statement      String        @default("TBD")
-  description    String?
-  closesAt       DateTime      @default(now())
-  moonPrice      Decimal       @default(0.5) @db.Decimal(10, 4)
-  rugPrice       Decimal       @default(0.5) @db.Decimal(10, 4)
-  totalVolume    Decimal       @default(0) @db.Decimal(18, 4)
-  liquidity      Decimal       @default(0) @db.Decimal(18, 4)
-  minBet         Decimal       @default(1) @db.Decimal(10, 4)
-  maxBet         Decimal?      @db.Decimal(10, 4)
-  participants   Int           @default(0)
-  feeBps         Int           @default(100)
-  yesMint        String?
-  noMint         String?
-  lpMint         String?
-  poolAuthority  String?
-  poolYesAccount String?
-  poolNoAccount  String?
-  marketPda      String?       // Solana market PDA address
-  authority      String?       // Wallet address that created the market
-  blockchainMarketId String?   // Market ID used for PDA generation
-  reserveYes     Decimal       @default(0) @db.Decimal(18, 6)
-  reserveNo      Decimal       @default(0) @db.Decimal(18, 6)
-  state          MarketState   @default(ACTIVE)
-  outcome        MarketOutcome?
-  resolvedAt     DateTime?
-  resolvedBy     String?
-  resolutionTx   String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                 String         @id @default(uuid())
+  missionId          String         @unique
+  statement          String         @default("TBD")
+  description        String?
+  closesAt           DateTime       @default(now())
+  moonPrice          Decimal        @default(0.5) @db.Decimal(10, 4)
+  rugPrice           Decimal        @default(0.5) @db.Decimal(10, 4)
+  totalVolume        Decimal        @default(0) @db.Decimal(18, 4)
+  liquidity          Decimal        @default(0) @db.Decimal(18, 4)
+  minBet             Decimal        @default(1) @db.Decimal(10, 4)
+  maxBet             Decimal?       @db.Decimal(10, 4)
+  participants       Int            @default(0)
+  feeBps             Int            @default(100)
+  yesMint            String?
+  noMint             String?
+  lpMint             String?
+  poolAuthority      String?
+  poolYesAccount     String?
+  poolNoAccount      String?
+  marketPda          String? // Solana market PDA address
+  authority          String? // Wallet address that created the market
+  blockchainMarketId String? // Market ID used for PDA generation
+  reserveYes         Decimal        @default(0) @db.Decimal(18, 6)
+  reserveNo          Decimal        @default(0) @db.Decimal(18, 6)
+  state              MarketState    @default(ACTIVE)
+  outcome            MarketOutcome?
+  resolvedAt         DateTime?
+  resolvedBy         String?
+  resolutionTx       String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
   bets    Bet[]
@@ -154,18 +154,18 @@ model Market {
 }
 
 model Bet {
-  id           String     @id @default(uuid())
+  id           String      @id @default(uuid())
   userId       String
   marketId     String
   position     String // "MOON" or "RUG"
   shares       Int
-  entryPrice   Decimal    @db.Decimal(10, 2)
-  currentPrice Decimal    @db.Decimal(10, 2)
-  status       BetStatus  @default(ACTIVE)
+  entryPrice   Decimal     @db.Decimal(10, 2)
+  currentPrice Decimal     @db.Decimal(10, 2)
+  status       BetStatus   @default(ACTIVE)
   outcome      BetOutcome? @default(PENDING)
-  pnl          Decimal?   @db.Decimal(18, 2)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  pnl          Decimal?    @db.Decimal(18, 2)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
@@ -207,11 +207,11 @@ model Log {
 }
 
 model AgentStats {
-  id         String   @id @default(uuid())
-  agentId   String   @unique
-  currentPnL Decimal  @default(0) @db.Decimal(18, 2)
-  compute    Decimal  @default(0) @db.Decimal(5, 2) // percentage
-  status     String
+  id          String   @id @default(uuid())
+  agentId     String   @unique
+  currentPnL  Decimal  @default(0) @db.Decimal(18, 2)
+  compute     Decimal  @default(0) @db.Decimal(5, 2) // percentage
+  status      String
   lastUpdated DateTime @default(now()) @updatedAt
 
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)

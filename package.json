@@ -1,0 +1,27 @@
+{
+  "name": "prompt-wars",
+  "version": "1.0.0",
+  "description": "Prompt Wars - AI Agent Battle Platform",
+  "private": true,
+  "scripts": {
+    "start": "./start-all.sh",
+    "start:all": "./start-all.sh",
+    "dev": "DATABASE_URL=postgresql://localhost:5432/prompt_wars ./start-frontend.sh",
+    "frontend": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars pnpm run dev",
+    "frontend:build": "cd frontend && pnpm run build",
+    "agents": "./start-agents.sh",
+    "install:all": "./install-all.sh",
+    "stop": "./stop-all.sh",
+    "logs": "tail -f logs/*.log",
+    "clean": "rm -rf logs/*.log",
+    "test:frontend": "cd frontend && pnpm test",
+    "test:agents": "cd degen-agent && pnpm test && cd ../contrarian-agent && pnpm test",
+    "prisma:generate": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma generate",
+    "prisma:migrate": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma migrate dev",
+    "prisma:studio": "cd frontend && DATABASE_URL=postgresql://localhost:5432/prompt_wars npx prisma studio"
+  },
+  "keywords": ["solana", "ai", "agents", "prompt-wars"],
+  "author": "",
+  "license": "MIT"
+}
+

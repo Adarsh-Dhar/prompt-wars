@@ -1,0 +1,165 @@
+
+> my-v0-project@0.1.0 dev /Users/adarsh/Documents/prompt-wars/frontend
+> next dev
+
+   ▲ Next.js 16.0.7 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.101:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 759ms
+Error registering agent: Error [ZodError]: [
+  {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+      "category"
+    ],
+    "message": "Required"
+  },
+  {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+      "url"
+    ],
+    "message": "Required"
+  }
+]
+    at POST (app/api/agents/register/route.ts:15:38)
+  13 |   try {
+  14 |     const body = await request.json()
+> 15 |     const data = registerAgentSchema.parse(body)
+     |                                      ^
+  16 |
+  17 |     // Check if agent with this name already exists
+  18 |     const existingAgent = await db.agent.findUnique({ {
+  issues: [Array],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)]
+}
+ POST /api/agents/register 400 in 980ms (compile: 709ms, render: 271ms)
+ ○ Compiling /_not-found/page ...
+Error registering agent: Error [ZodError]: [
+  {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+      "category"
+    ],
+    "message": "Required"
+  },
+  {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+      "url"
+    ],
+    "message": "Required"
+  }
+]
+    at POST (app/api/agents/register/route.ts:15:38)
+  13 |   try {
+  14 |     const body = await request.json()
+> 15 |     const data = registerAgentSchema.parse(body)
+     |                                      ^
+  16 |
+  17 |     // Check if agent with this name already exists
+  18 |     const existingAgent = await db.agent.findUnique({ {
+  issues: [Array],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)]
+}
+ POST /api/agents/register 400 in 143ms (compile: 3ms, render: 140ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 1445ms (compile: 959ms, render: 486ms)
+ GET /sign-in?redirect=%2Fdashboard 404 in 4.1s (compile: 3.7s, render: 420ms)
+ GET /index.iife.min.js.map 404 in 125ms (compile: 33ms, render: 92ms)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching stats: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/stats/route.ts:7:21)
+   5 |   try {
+   6 |     // Get total volume from all markets
+>  7 |     const markets = await db.market.findMany({
+     |                     ^
+   8 |       select: {
+   9 |         totalVolume: true,
+  10 |       }, {
+  clientVersion: '7.1.0'
+}
+ GET /api/stats 500 in 772ms (compile: 102ms, render: 670ms)
+Error fetching stats: Error: Failed to fetch stats
+    at getStats (app/page.tsx:10:24)
+    at async HomePage (app/page.tsx:39:36)
+   8 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+   9 |     const res = await fetch(`${baseUrl}/api/stats`, { cache: "no-store" })
+> 10 |     if (!res.ok) throw new Error("Failed to fetch stats")
+     |                        ^
+  11 |     return await res.json()
+  12 |   } catch (error) {
+  13 |     console.error("Error fetching stats:", error)
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Error fetching markets: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async GET (app/api/markets/route.ts:28:21)
+  26 |     }
+  27 |
+> 28 |     const markets = await db.market.findMany({
+     |                     ^
+  29 |       where,
+  30 |       include: {
+  31 |         mission: { {
+  clientVersion: '7.1.0'
+}
+Error details: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async PrismaPgAdapter.performIO (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20203:28)
+    at async PrismaPgAdapter.queryRaw (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/node_modules__pnpm_e02a2fd9._.js:20155:34)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24163
+    at async fr (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:24002)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:42384)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41603)
+    at async e.interpretNode (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:43982)
+    at async e.run (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:11:41223)
+    at async e.execute (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:57:682)
+    at async Dt.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:58:2186)
+    at async Object.singleLoader (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:6569)
+    at async qr.request (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:65:7061)
+    at async a (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/@prisma+client@7.1.0_prisma@7.1.0_@types+react@19.2.7_react-dom@19.2.0_react@19.2.0__react@19_6wpdpimu3ovlpniwtidk4r252e/node_modules/@prisma/client/runtime/client.js:75:5816)
+    at async GET (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/[root-of-the-server]__bfbd5906._.js:479:25)
+    at async AppRouteRouteModule.do (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:37789)
+    at async AppRouteRouteModule.handle (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:45045)
+    at async responseGenerator (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14339:38)
+    at async AppRouteRouteModule.handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:187851)
+    at async handleResponse (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14401:32)
+    at async handler (/Users/adarsh/Documents/prompt-wars/frontend/.next/dev/server/chunks/37518_next_ca8f8c31._.js:14454:13)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1413:9)
+    at async DevServer.renderPageComponent (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1465:24)
+    at async DevServer.renderToResponseImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1515:32)
+    at async DevServer.pipeImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:1021:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/next-server.js:394:17)
+    at async DevServer.handleRequestImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/base-server.js:912:17)
+    at async /Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:382:20
+    at async Span.traceAsyncFn (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/trace/trace.js:157:20)
+    at async DevServer.handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/dev/next-dev-server.js:378:24)
+    at async invokeRender (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:240:21)
+    at async handleRequest (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:436:24)
+    at async requestHandlerImpl (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/router-server.js:484:13)
+    at async Server.requestListener (/Users/adarsh/Documents/prompt-wars/frontend/node_modules/.pnpm/next@16.0.7_@babel+core@7.28.5_react-dom@19.2.0_react@19.2.0__react@19.2.0/node_modules/next/dist/server/lib/start-server.js:226:13)
+ GET /api/markets?status=ACTIVE&limit=3 500 in 891ms (compile: 633ms, render: 258ms)
+Error fetching markets: Error: Failed to fetch markets
+    at getFeaturedMarkets (app/page.tsx:29:24)
+    at async HomePage (app/page.tsx:39:36)
+  27 |     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+  28 |     const res = await fetch(`${baseUrl}/api/markets?status=ACTIVE&limit=3`, { cache: "no-store" })
+> 29 |     if (!res.ok) throw new Error("Failed to fetch markets")
+     |                        ^
+  30 |     const data = await res.json()
+  31 |     return data.markets || []
+  32 |   } catch (error) {
+ GET / 200 in 2.5s (compile: 1428ms, render: 1057ms)
+ PUT /api/agents/contrarian-agent-1766808889142/status 404 in 94ms (compile: 47ms, render: 46ms)

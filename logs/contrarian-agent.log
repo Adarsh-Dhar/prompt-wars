@@ -1,0 +1,20 @@
+Contrarian Agent Key Loaded: CVCq5Swz7Fbzku7iNqgeANjYLJgQDAgnf4vq8nCbaRn2
+🎯 Contrarian Agent running on http://localhost:4002
+🔑 Agent Wallet: CVCq5Swz7Fbzku7iNqgeANjYLJgQDAgnf4vq8nCbaRn2
+💰 Payment Address: CVCq5Swz7Fbzku7iNqgeANjYLJgQDAgnf4vq8nCbaRn2
+💵 Reasoning Price: 0.001 SOL
+Contrarian Agent contrarian-agent-1766808889142 initialized successfully
+Failed to register agent: {"error":"Invalid request data","details":[{"code":"invalid_type","expected":"string","received":"undefined","path":["category"],"message":"Required"},{"code":"invalid_type","expected":"string","received":"undefined","path":["url"],"message":"Required"}]}
+Contrarian Agent initialized for general market analysis
+✅ Contrarian Agent initialized successfully
+[CONTRARIAN-AGENT]: 🎯 Contrarian Agent Online. Ready to inverse the herd!
+[CONTRARIAN-AGENT]: 😏 While retail panics, smart money accumulates...
+🎯 Initializing Contrarian Agent integration with frontend...
+Failed to register agent: {"error":"Invalid request data","details":[{"code":"invalid_type","expected":"string","received":"undefined","path":["category"],"message":"Required"},{"code":"invalid_type","expected":"string","received":"undefined","path":["url"],"message":"Required"}]}
+⚠️  Failed to register with frontend, continuing anyway...
+🎯 Contrarian Agent integration initialized successfully
+🔑 Agent ID: CVCq5Swz7Fbzku7iNqgeANjYLJgQDAgnf4vq8nCbaRn2
+🌐 Frontend URL: http://localhost:3000
+🔗 Agent Server: http://localhost:4002
+😏 Smugness Level: 8/10
+🎭 Personality Mode: SMUG
