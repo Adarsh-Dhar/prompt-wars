@@ -487,6 +487,72 @@ export async function registerAgent(params: {
 }
 
 /**
+ * Update agent metadata
+ */
+export async function updateMetadata(params: {
+  connection: anchor.web3.Connection
+  wallet: Wallet
+  name: string
+  url: string
+  tags: string[]
+}) {
+  const { connection, wallet, name, url, tags } = params
+  const program = getProgram(connection, wallet)
+
+  if (!("publicKey" in wallet) || !wallet.publicKey) {
+    throw new Error("Wallet not connected")
+  }
+
+  const agent = getAgentPda(wallet.publicKey)
+
+  const sig = await program.methods
+    .updateMetadata(name, url, tags)
+    .accounts({
+      agent,
+      authority: wallet.publicKey,
+    })
+    .rpc()
+
+  return { signature: sig }
+}
+
+/**
+ * Slash an agent for missing proof deadline
+ */
+export async function slashAgent(params: {
+  connection: anchor.web3.Connection
+  wallet: Wallet
+  proofRequest: anchor.web3.PublicKey
+}) {
+  const { connection, wallet, proofRequest } = params
+  const program = getProgram(connection, wallet)
+
+  if (!("publicKey" in wallet) || !wallet.publicKey) {
+    throw new Error("Wallet not connected")
+  }
+
+  // Fetch the proof request to get the agent
+  const proofRequestAccount = await (program.account as any).proofRequest.fetch(proofRequest)
+  const agent = proofRequestAccount.agent
+  const vault = getVaultPda(agent)
+  const registry = getRegistryPda()
+
+  const sig = await program.methods
+    .slashAgent()
+    .accounts({
+      registry,
+      agent,
+      proofRequest,
+      vault,
+      authority: wallet.publicKey,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    })
+    .rpc()
+
+  return { signature: sig }
+}
+
+/**
  * Convert PublicKey to [u8; 32] array format
  */
 function publicKeyToUint8Array32(pubkey: anchor.web3.PublicKey): number[] {
