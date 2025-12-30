@@ -1,10 +1,13 @@
 import '@rainbow-me/rainbowkit/styles.css';
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { mainnet, polygon, optimism, arbitrum, base } from 'wagmi/chains';
+import { cronosTestnet } from 'wagmi/chains';
+
+// Use this config ONLY if you are not using /lib/evm-wallet-config.ts
+// For Prompt Wars, always prefer importing from /lib/evm-wallet-config.ts
 
 export const config = getDefaultConfig({
-    appName: 'My Crypto App',
-    projectId: 'a7e2d08a1841f27f707fccb991d66dab', // Replace with your actual Project ID
-    chains: [mainnet, polygon, optimism, arbitrum, base],
+    appName: 'Prompt Wars',
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'MISSING_PROJECT_ID',
+    chains: [cronosTestnet],
     ssr: true, // If using Next.js, set to true
 });

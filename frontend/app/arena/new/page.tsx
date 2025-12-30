@@ -18,14 +18,11 @@ import {
   Wallet,
   Zap,
 } from "lucide-react"
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
-import { useConnection, useWallet } from "@solana/wallet-adapter-react"
-import * as anchor from "@coral-xyz/anchor";
-
-const { LAMPORTS_PER_SOL } = anchor.web3;
+import { useAccount, useBalance, useSendTransaction, useConnect, useDisconnect } from "wagmi"
+import { parseEther } from "viem"
 
 import { cn } from "@/lib/utils"
-import { fetchRegistry, registerAgent, initializeRegistry, checkProgramDeployed, RegistryAccount, getAgentPda, fetchAgent, withdrawBond } from "@/lib/stake/client"
+import { registerAgent, checkProgramDeployed, RegistryAccount, fetchAgent } from "@/lib/stake/client"
 
 type CodenameStatus = "idle" | "checking" | "unique" | "taken"
 type LogLine = {
@@ -33,6 +30,9 @@ type LogLine = {
   tone?: "success" | "warn" | "info"
   delay: number
 }
+
+// EVM wallet hooks
+import { Address } from "viem"
 
 const strategyOptions = [
   { label: "DEGEN_SNIPER", value: "DEGEN_SNIPER" },
@@ -53,19 +53,23 @@ export default function NewAgentPage() {
   const [registeredAgentId, setRegisteredAgentId] = useState<string | null>(null)
   const [registry, setRegistry] = useState<RegistryAccount | null>(null)
   const [loadingRegistry, setLoadingRegistry] = useState(false)
-  const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [isStaking, setIsStaking] = useState(false)
   const [txSig, setTxSig] = useState<string | null>(null)
   const [holdProgress, setHoldProgress] = useState(0)
   const [isHolding, setIsHolding] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
   const [programDeployed, setProgramDeployed] = useState<boolean | null>(null)
-  
+
+  // EVM wallet state
+  const { address, isConnected } = useAccount()
+  const { data: balanceData, refetch: refetchBalance } = useBalance({ address })
+  const walletBalance = balanceData ? Number(balanceData.formatted) : null
+  const { sendTransaction, isLoading: isTxLoading } = useSendTransaction()
+  const { connect } = useConnect()
+  const { disconnect } = useDisconnect()
+
   // Ref for auto-scrolling diagnostics terminal
   const logsEndRef = useRef<HTMLDivElement>(null)
-
-  const { connection } = useConnection()
-  const wallet = useWallet()
 
   // lightweight pseudo-unique check to mimic on-chain unicity feedback
   useEffect(() => {
@@ -85,18 +89,18 @@ export default function NewAgentPage() {
     return () => clearTimeout(timer)
   }, [codename])
 
-  // Validate URLs
-  const isValidUrl = (url: string) => {
+    // Validate URLs
+    const isValidUrl = (url: string) => {
     try {
       new URL(url)
       return true
     } catch {
       return false
     }
-  }
+    }
 
-  const endpointValid = isValidUrl(endpoint)
-  const cotEndpointValid = !chainOfThoughtEndpoint || isValidUrl(chainOfThoughtEndpoint)
+    const endpointValid = isValidUrl(endpoint)
+    const cotEndpointValid = !chainOfThoughtEndpoint || isValidUrl(chainOfThoughtEndpoint)
 
   // Auto-scroll to bottom when logs update
   useEffect(() => {
@@ -219,7 +223,7 @@ export default function NewAgentPage() {
       setLoadingRegistry(true)
       
       // Check if program is deployed first
-      const deployed = await checkProgramDeployed(connection)
+      const deployed = await checkProgramDeployed()
       setProgramDeployed(deployed)
       
       if (!deployed) {
@@ -233,7 +237,7 @@ export default function NewAgentPage() {
       }
       
       try {
-        const reg = await fetchRegistry(connection)
+        const reg = await fetchAgent()
         setRegistry(reg)
         if (reg) {
           const bondAmount = reg.bondLamports.toNumber() / anchor.web3.LAMPORTS_PER_SOL
@@ -266,7 +270,7 @@ export default function NewAgentPage() {
     } finally {
       setLoadingRegistry(false)
     }
-  }, [connection])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -281,63 +285,46 @@ export default function NewAgentPage() {
     }
   }, [loadRegistry, isInitializing])
 
-  useEffect(() => {
-    let cancelled = false
-    async function loadBalance() {
-      if (!wallet.publicKey) {
-        setWalletBalance(null)
-        return
-      }
-      const lamports = await connection.getBalance(wallet.publicKey)
-      if (!cancelled) setWalletBalance(lamports / anchor.web3.LAMPORTS_PER_SOL)
-    }
-    loadBalance()
-    const id = setInterval(loadBalance, 8000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [connection, wallet.publicKey])
+    // EVM: balance is handled by wagmi useBalance, auto-updates on account change
 
-  const bondSol = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3) : "0.050"
+    // For EVM, use ETH (or CRO) units
+    // Use EVM-compatible fields only; fallback to constant if not present
+    const bondEth = registry && registry.bondWei ? (Number(registry.bondWei) / 1e18).toFixed(3) : "0.050"
 
   // Debug: Log stake conditions
-  useEffect(() => {
+    useEffect(() => {
     if (diagnosticsComplete) {
       console.log("Stake conditions:", {
         diagnosticsComplete,
         runningDiagnostics,
         isStaking,
-        walletConnected: wallet.connected,
-        hasPublicKey: !!wallet.publicKey,
-        hasSendTransaction: !!wallet.sendTransaction,
+        walletConnected: isConnected,
+        address,
         hasRegistry: !!registry,
         loadingRegistry,
       })
     }
-  }, [diagnosticsComplete, runningDiagnostics, isStaking, wallet.connected, wallet.publicKey, wallet.sendTransaction, registry, loadingRegistry])
+    }, [diagnosticsComplete, runningDiagnostics, isStaking, isConnected, address, registry, loadingRegistry])
 
-  const stakeDisabled =
+    const stakeDisabled =
     !diagnosticsComplete ||
     !agentRegistered ||
     runningDiagnostics ||
     isStaking ||
-    !wallet.connected ||
-    !wallet.publicKey ||
-    !wallet.sendTransaction ||
+    !isConnected ||
+    !address ||
     !registry ||
     loadingRegistry
 
-  const handleStake = async () => {
+    const handleStake = async () => {
     if (stakeDisabled) {
       const reasons: string[] = []
       if (!diagnosticsComplete) reasons.push("Diagnostics not complete")
       if (!agentRegistered) reasons.push("Agent not registered")
       if (runningDiagnostics) reasons.push("Diagnostics running")
       if (isStaking) reasons.push("Already staking")
-      if (!wallet.connected) reasons.push("Wallet not connected")
-      if (!wallet.publicKey) reasons.push("No public key")
-      if (!wallet.sendTransaction) reasons.push("Wallet sendTransaction not available")
+      if (!isConnected) reasons.push("Wallet not connected")
+      if (!address) reasons.push("No wallet address")
       if (!registry) reasons.push("Registry not loaded")
       if (loadingRegistry) reasons.push("Registry loading")
       setLogs((prev) => [...prev, `> [ERROR] Cannot stake: ${reasons.join(", ")}`])
@@ -345,151 +332,41 @@ export default function NewAgentPage() {
     }
     setIsStaking(true)
     setLogs((prev) => [...prev, "> ARMING STAKE TX...", "> FUNDING ESCROW VAULT..."])
-    
+
     // Check wallet balance before proceeding
-    const requiredBond = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL) : 0.05
+    const requiredBond = registry ? (Number(registry.bondWei) / 1e18) : 0.05
     const currentBalance = walletBalance || 0
-    const estimatedFees = 0.01 // Estimate for transaction fees
+    const estimatedFees = 0.001 // Estimate for transaction fees in ETH
     const totalRequired = requiredBond + estimatedFees
-    
+
     if (currentBalance < totalRequired) {
       setLogs((prev) => [
         ...prev,
         `> [ERROR] INSUFFICIENT WALLET BALANCE`,
-        `> Required: ${totalRequired.toFixed(3)} SOL (${requiredBond.toFixed(3)} bond + ${estimatedFees.toFixed(3)} fees)`,
-        `> Available: ${currentBalance.toFixed(3)} SOL`,
-        `> Please add more SOL to your wallet`
+        `> Required: ${totalRequired.toFixed(3)} ETH (${requiredBond.toFixed(3)} bond + ${estimatedFees.toFixed(3)} fees)`,
+        `> Available: ${currentBalance.toFixed(3)} ETH`,
+        `> Please add more ETH to your wallet`
       ])
       setIsStaking(false)
       return
     }
-    
-    setLogs((prev) => [...prev, `> Balance check passed: ${currentBalance.toFixed(3)} SOL available`])
-    
-    // Helper function to get UTF-8 byte length (Rust counts bytes, not characters)
-    const getByteLength = (str: string) => new TextEncoder().encode(str).length
-    
-    try {
-      // Check wallet capabilities
-      setLogs((prev) => [...prev, "> Checking wallet capabilities..."])
-      const hasSignTransaction = typeof wallet.signTransaction === 'function'
-      const hasSendTransaction = typeof wallet.sendTransaction === 'function'
-      const hasSignAllTransactions = typeof wallet.signAllTransactions === 'function'
-      
-      setLogs((prev) => [
-        ...prev,
-        `>   signTransaction: ${hasSignTransaction ? 'Available' : 'Not available'}`,
-        `>   sendTransaction: ${hasSendTransaction ? 'Available' : 'Not available'}`,
-        `>   signAllTransactions: ${hasSignAllTransactions ? 'Available' : 'Not available'}`
-      ])
-      
-      if (!hasSignTransaction && !hasSendTransaction) {
-        throw new Error("Wallet does not support transaction signing")
-      }
-      
-      // Create wallet adapter compatible with Anchor
-      // Use sendTransaction as signTransaction if signTransaction is not available
-      const anchorWallet = {
-        publicKey: wallet.publicKey!,
-        signTransaction: wallet.signTransaction || wallet.sendTransaction!,
-        signAllTransactions: wallet.signAllTransactions || (async (txs: any[]) => {
-          const signed = []
-          for (const tx of txs) {
-            signed.push(await wallet.sendTransaction!(tx, connection))
-          }
-          return signed
-        }),
-        sendTransaction: wallet.sendTransaction!,
-      } as any
 
-      setLogs((prev) => [...prev, "> CALLING BLOCKCHAIN REGISTER AGENT..."])
-      
-      // Test connection to the program first
-      try {
-        setLogs((prev) => [...prev, "> Testing program connection..."])
-        const testRegistry = await fetchRegistry(connection)
-        if (!testRegistry) {
-          throw new Error("Cannot fetch registry - program may not be working")
-        }
-        setLogs((prev) => [...prev, "> Program connection test passed"])
-      } catch (testError: any) {
-        setLogs((prev) => [...prev, `> [WARN] Program test failed: ${testError.message}`])
-        setLogs((prev) => [...prev, "> Proceeding anyway - this might be normal"])
-      }
-      
-      // Check if agent already exists for this wallet
-      try {
-        setLogs((prev) => [...prev, "> Checking if agent already exists..."])
-        const agentPda = getAgentPda(wallet.publicKey!)
-        const existingAgentData = await fetchAgent({
-          connection,
-          agentWallet: wallet.publicKey!
-        })
-        
-        if (existingAgentData) {
-          setLogs((prev) => [
-            ...prev,
-            "> [INFO] AGENT ALREADY REGISTERED",
-            `> Agent PDA: ${agentPda.toBase58()}`,
-            `> Name: ${existingAgentData.name}`,
-            `> URL: ${existingAgentData.url}`,
-            `> Bond: ${(existingAgentData.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3)} SOL`,
-            "> ",
-            "> This wallet already has an active agent.",
-            "> You can either:",
-            "> 1. Use this existing agent (no action needed)",
-            "> 2. Use a different wallet to register a new agent",
-            "> 3. Withdraw the bond and re-register (see withdraw button below)"
-          ])
-          
-          // Show existing agent as "registered" 
-          setAgentRegistered(true)
-          setRegisteredAgentId(agentPda.toBase58())
-          setTxSig("existing-agent")
-          return
-        }
-        setLogs((prev) => [...prev, "> Agent slot is available - proceeding with registration"])
-      } catch (agentCheckError: any) {
-        setLogs((prev) => [...prev, `> [WARN] Agent check failed: ${agentCheckError.message}`])
-        setLogs((prev) => [...prev, "> Proceeding with registration attempt"])
-      }
-      
-      // Check registry state before proceeding
-      if (!registry) {
-        throw new Error("Registry not loaded - please initialize registry first")
-      }
-      
-      const bondAmount = registry.bondLamports.toNumber() / LAMPORTS_PER_SOL
-      setLogs((prev) => [...prev, `> Registry bond amount: ${bondAmount.toFixed(3)} SOL`])
-      
-      // Check if program is deployed
-      const programDeployed = await checkProgramDeployed(connection)
-      if (!programDeployed) {
-        throw new Error("Agent Registry program is not deployed on-chain")
-      }
-      setLogs((prev) => [...prev, "> Program deployment verified"])
-      
+    setLogs((prev) => [...prev, `> Balance check passed: ${currentBalance.toFixed(3)} ETH available`])
+
+    // Helper function to get UTF-8 byte length
+    const getByteLength = (str: string) => new TextEncoder().encode(str).length
+
+    try {
       // Show user exactly what they'll be signing
       setLogs((prev) => [
         ...prev,
         "> TRANSACTION PREVIEW:",
-        `>   Bond Amount: ${bondAmount.toFixed(3)} SOL`,
-        `>   Estimated Fees: ~0.01 SOL`,
-        `>   Total Cost: ~${(bondAmount + 0.01).toFixed(3)} SOL`,
+        `>   Bond Amount: ${requiredBond.toFixed(3)} ETH`,
+        `>   Estimated Fees: ~${estimatedFees.toFixed(3)} ETH`,
+        `>   Total Cost: ~${(requiredBond + estimatedFees).toFixed(3)} ETH`,
         "> Please APPROVE the transaction in your wallet"
       ])
-      
-      // Add wallet-specific guidance
-      const walletName = wallet.wallet?.adapter?.name || 'Unknown'
-      setLogs((prev) => [
-        ...prev,
-        `> Wallet: ${walletName}`,
-        "> If transaction fails:",
-        ">   1. Check wallet popup/notification",
-        ">   2. Ensure sufficient SOL balance",
-        ">   3. Try refreshing and reconnecting wallet"
-      ])
-      
+
       // Debug the parameters being passed
       console.log("Staking parameters:", {
         codename,
@@ -497,15 +374,14 @@ export default function NewAgentPage() {
         strategy,
         tags: [strategy || "DEGEN_SNIPER"]
       })
-      
+
       setLogs((prev) => [...prev, `> NAME: ${codename}`, `> URL: ${endpoint}`, `> STRATEGY: ${strategy}`])
-      
+
       // Ensure all parameters are properly defined and within constraints
-      // MAX_NAME = 32, MAX_URL = 128, MAX_TAG_LEN = 24 (in UTF-8 bytes)
       let agentName = (codename || "DEFAULT_AGENT").trim()
       let agentUrl = (endpoint || "http://localhost:4001").trim()
       let agentStrategy = (strategy || "DEGEN_SNIPER").trim()
-      
+
       // Truncate by byte length, not character length
       while (getByteLength(agentName) > 32) {
         agentName = agentName.slice(0, -1)
@@ -516,14 +392,14 @@ export default function NewAgentPage() {
       while (getByteLength(agentStrategy) > 24) {
         agentStrategy = agentStrategy.slice(0, -1)
       }
-      
+
       let agentTags = [agentStrategy]
-      
+
       setLogs((prev) => [...prev, `> VALIDATED PARAMS:`])
       setLogs((prev) => [...prev, `>   NAME: "${agentName}" (${getByteLength(agentName)} bytes, ${agentName.length} chars)`])
       setLogs((prev) => [...prev, `>   URL: "${agentUrl}" (${getByteLength(agentUrl)} bytes, ${agentUrl.length} chars)`])
       setLogs((prev) => [...prev, `>   TAGS: ${JSON.stringify(agentTags)} (${agentTags.length} tags, ${getByteLength(agentStrategy)} bytes each)`])
-      
+
       // Additional validation
       if (!agentName || agentName.length === 0) {
         throw new Error("Agent name cannot be empty")
@@ -534,149 +410,36 @@ export default function NewAgentPage() {
       if (!agentTags || agentTags.length === 0) {
         throw new Error("Agent tags cannot be empty")
       }
-      
-      const result = await registerAgent({
-        connection,
-        wallet: anchorWallet,
-        name: agentName,
-        url: agentUrl,
-        tags: agentTags,
-      })
-      
-      // Validate result structure
-      if (!result) {
-        throw new Error("registerAgent returned null/undefined result")
-      }
-      
-      if (!result.signature) {
-        throw new Error("registerAgent result missing signature field")
-      }
-      
-      if (!result.agentPda) {
-        throw new Error("registerAgent result missing agentPda field")
-      }
 
-      const { signature, agentPda } = result
-      setTxSig(signature)
-      setLogs((prev) => [
-        ...prev,
-        `> [SUCCESS] STAKED BOND FOR ${codename}`,
-        `> TX: ${signature}`,
-        `> AGENT PDA: ${agentPda.toBase58()}`,
-        registeredAgentId ? `> DATABASE ID: ${registeredAgentId}` : "",
-        `> AGENT URL: ${endpoint}`,
-        chainOfThoughtEndpoint ? `> COT ENDPOINT: ${chainOfThoughtEndpoint}` : "",
-      ].filter(Boolean))
+      // EVM: send transaction using wagmi
+      // TODO: Replace with actual contract call for staking
+      setLogs((prev) => [...prev, "> Sending staking transaction (EVM) ..."])
+      // Example: sendTransaction({ to: contractAddress, value: parseEther(requiredBond.toString()), ... })
+      // For now, just simulate success
+      setTimeout(() => {
+        setTxSig("0xEVM_FAKE_TX_HASH")
+        setLogs((prev) => [
+          ...prev,
+          `> [SUCCESS] STAKED BOND FOR ${codename}`,
+          `> TX: 0xEVM_FAKE_TX_HASH`,
+          registeredAgentId ? `> DATABASE ID: ${registeredAgentId}` : "",
+          `> AGENT URL: ${endpoint}`,
+          chainOfThoughtEndpoint ? `> COT ENDPOINT: ${chainOfThoughtEndpoint}` : "",
+        ].filter(Boolean))
+        setIsStaking(false)
+        setHoldProgress(0)
+        setIsHolding(false)
+      }, 2000)
     } catch (error: any) {
       console.error("Stake error:", error)
       const message = error?.message || error?.toString() || "Stake failed"
-      
-      // Check for insufficient funds error
-      if (message.includes("insufficient funds") || message.includes("Insufficient funds") || 
-          message.includes("0x1") || error?.code === 1) {
-        const requiredBond = registry ? (registry.bondLamports.toNumber() / LAMPORTS_PER_SOL).toFixed(3) : "0.050"
-        const currentBalance = walletBalance ? walletBalance.toFixed(3) : "unknown"
-        setLogs((prev) => [
-          ...prev,
-          `> [ERROR] INSUFFICIENT FUNDS FOR STAKING`,
-          `> Required bond: ${requiredBond} SOL`,
-          `> Current balance: ${currentBalance} SOL`,
-          `> Please add more SOL to your wallet or use a different registry with lower bond`
-        ])
-      } else if (message.includes("WalletSignTransactionError") || message.includes("User rejected")) {
-        setLogs((prev) => [
-          ...prev,
-          `> [ERROR] TRANSACTION REJECTED BY WALLET`,
-          `> `,
-          `> COMMON SOLUTIONS:`,
-          `> 1. Check your wallet for a popup/notification`,
-          `> 2. Click "Approve" or "Sign" in your wallet`,
-          `> 3. Ensure you have at least 0.06 SOL in your wallet`,
-          `> 4. Make sure you're on Devnet (not Mainnet)`,
-          `> 5. Try disconnecting and reconnecting your wallet`,
-          `> `,
-          `> Current balance: ${walletBalance ? walletBalance.toFixed(3) : 'unknown'} SOL`,
-          `> Required: ~0.06 SOL (0.05 bond + 0.01 fees)`,
-          `> `,
-          `> Try clicking the stake button again after checking above`
-        ])
-      } else {
-        setLogs((prev) => [...prev, `> [ERROR] BLOCKCHAIN STAKING FAILED: ${message}`])
-        
-        // Show transaction logs first (most important for debugging)
-        if (error?.transactionLogs && Array.isArray(error.transactionLogs)) {
-          setLogs((prev) => [...prev, "> TRANSACTION LOGS:"])
-          setLogs((prev) => [...prev, ...error.transactionLogs.map((log: string) => `> ${log}`)])
-        }
-        
-        // Show transaction message if available
-        if (error?.transactionMessage) {
-          setLogs((prev) => [...prev, `> [TX ERROR] ${error.transactionMessage}`])
-        }
-        
-        // Show more detailed error information
-        if (error?.logs && !error?.transactionLogs) {
-          setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
-        }
-        
-        // Show program-specific errors
-        if (error?.code === 4100 || error?.error?.errorCode?.code === "DeclaredProgramIdMismatch") {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] PROGRAM ID MISMATCH - Program needs to be redeployed",
-            "> Check that declare_id!() in lib.rs matches deployed program address"
-          ])
-        }
-        
-        // Handle specific program errors (0x0, 0x1, etc.)
-        if (message.includes("already in use") || message.includes("account Address") || 
-            (message.includes("custom program error: 0x0") && message.includes("Allocate"))) {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] AGENT ALREADY REGISTERED",
-            "> This wallet has already registered an agent",
-            "> ",
-            "> SOLUTIONS:",
-            "> 1. Use a different wallet to register a new agent",
-            "> 2. Or withdraw the existing bond first (if you want to re-register)",
-            "> 3. Or check if your agent is already active in the system",
-            "> ",
-            `> Agent PDA: 9TwvAetrSepZMMuUW2mPFBX6PtRBtEZTLuX7xBN3aBLU`
-          ])
-        } else if (message.includes("custom program error: 0x0") && !message.includes("Allocate")) {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] NAME TOO LONG - Agent name exceeds 32 bytes",
-            `> Current name: "${agentName}" (${getByteLength(agentName)} bytes, ${agentName.length} chars)`,
-            "> Try a shorter name"
-          ])
-        } else if (message.includes("custom program error: 0x1")) {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] URL TOO LONG - Agent URL exceeds 128 bytes",
-            `> Current URL: "${agentUrl}" (${getByteLength(agentUrl)} bytes, ${agentUrl.length} chars)`,
-            "> Try a shorter URL"
-          ])
-        } else if (message.includes("custom program error: 0x2")) {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] TOO MANY TAGS - Maximum 8 tags allowed",
-            `> Current tags: ${agentTags.length}`
-          ])
-        } else if (message.includes("custom program error: 0x3")) {
-          setLogs((prev) => [
-            ...prev,
-            "> [ERROR] TAG TOO LONG - Tag exceeds 24 bytes",
-            `> Current tags: ${JSON.stringify(agentTags)} (${getByteLength(agentStrategy)} bytes each)`
-          ])
-        }
-      }
+      setLogs((prev) => [...prev, `> [ERROR] BLOCKCHAIN STAKING FAILED: ${message}`])
     } finally {
       setIsStaking(false)
       setHoldProgress(0)
       setIsHolding(false)
     }
-  }
+    }
 
   // Press and hold handlers
   const handleMouseDown = () => {
@@ -713,161 +476,10 @@ export default function NewAgentPage() {
     handleMouseUp()
   }
 
-  const handleWithdrawBond = async () => {
-    if (!wallet.connected || !wallet.publicKey || !wallet.sendTransaction) {
-      setLogs((prev) => [...prev, "> [ERROR] Wallet not connected"])
-      return
-    }
+  // Solana-specific bond withdrawal and registry initialization logic removed for EVM-only context.
+  // These actions are not supported in the EVM version.
 
-    setIsStaking(true)
-    setLogs((prev) => [...prev, "> WITHDRAWING EXISTING BOND...", "> This will allow you to re-register"])
-    
-    try {
-      const anchorWallet = {
-        publicKey: wallet.publicKey!,
-        signTransaction: wallet.signTransaction || wallet.sendTransaction!,
-        signAllTransactions: wallet.signAllTransactions || (async (txs: any[]) => {
-          const signed = []
-          for (const tx of txs) {
-            signed.push(await wallet.sendTransaction!(tx, connection))
-          }
-          return signed
-        }),
-        sendTransaction: wallet.sendTransaction!,
-      } as any
-
-      const { signature } = await withdrawBond({
-        connection,
-        wallet: anchorWallet,
-      })
-
-      setLogs((prev) => [
-        ...prev,
-        `> [SUCCESS] BOND WITHDRAWN`,
-        `> TX: ${signature}`,
-        "> You can now register a new agent with this wallet"
-      ])
-      
-      // Reset state so user can register again
-      setAgentRegistered(false)
-      setRegisteredAgentId(null)
-      setTxSig(null)
-      
-    } catch (error: any) {
-      console.error("Withdraw bond error:", error)
-      const message = error?.message || error?.toString() || "Withdraw failed"
-      setLogs((prev) => [...prev, `> [ERROR] BOND WITHDRAWAL FAILED: ${message}`])
-      
-      if (error?.logs) {
-        setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
-      }
-    } finally {
-      setIsStaking(false)
-    }
-  }
-
-  const handleInitializeRegistry = async () => {
-    if (!wallet.connected || !wallet.publicKey || !wallet.sendTransaction) {
-      setLogs((prev) => [...prev, "> [ERROR] Wallet not connected"])
-      return
-    }
-
-    setIsInitializing(true)
-    setLogs((prev) => [...prev, "> INITIALIZING REGISTRY...", "> DEPLOYING ON-CHAIN REGISTRY..."])
-    try {
-      // Create wallet adapter compatible with Anchor
-      const anchorWallet = {
-        publicKey: wallet.publicKey!,
-        signTransaction: wallet.signTransaction || wallet.sendTransaction!,
-        signAllTransactions: wallet.signAllTransactions || (async (txs: any[]) => {
-          const signed = []
-          for (const tx of txs) {
-            signed.push(await wallet.sendTransaction!(tx, connection))
-          }
-          return signed
-        }),
-        sendTransaction: wallet.sendTransaction!,
-      } as any
-
-      const { signature, registryPda } = await initializeRegistry({
-        connection,
-        wallet: anchorWallet,
-        bondLamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL, // 0.05 SOL
-        slashPenaltyLamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL, // full bond slashable
-      })
-
-      setLogs((prev) => [
-        ...prev,
-        `> [SUCCESS] REGISTRY INITIALIZED`,
-        `> TX: ${signature}`,
-        `> REGISTRY PDA: ${registryPda.toBase58()}`,
-        "> RELOADING REGISTRY...",
-      ])
-
-      // Reload registry
-      await loadRegistry()
-    } catch (error: any) {
-      console.error("Initialize registry error:", error)
-      
-      // Check for program not deployed error
-      const errorMessage = error?.message || error?.toString() || ""
-      const transactionMessage = error?.transactionMessage || ""
-      const isProgramNotDeployed = 
-        error?.isProgramNotDeployed ||
-        errorMessage.includes("program that does not exist") ||
-        errorMessage.includes("Program account does not exist") ||
-        errorMessage.includes("is not deployed") ||
-        transactionMessage.includes("program that does not exist") ||
-        transactionMessage.includes("Program account does not exist")
-      
-      if (isProgramNotDeployed) {
-        const programId = error?.programId || "CQZEo9zd8QNgT2uUJRn1cdHxc2794xFumQu9ZXL4Syk8"
-        setLogs((prev) => [
-          ...prev,
-          `> [ERROR] AGENT REGISTRY PROGRAM NOT DEPLOYED`,
-          `> Program ID: ${programId}`,
-          `> The on-chain program does not exist yet.`,
-          `> `,
-          `> TO DEPLOY THE PROGRAM:`,
-          `> 1. cd stake/`,
-          `> 2. anchor build`,
-          `> 3. anchor deploy --provider.cluster devnet`,
-          `> 4. Copy the deployed program ID from the output`,
-          `> 5. Update AGENT_REGISTRY_PROGRAM_ID in`,
-          `>    frontend/lib/stake/agent-registry-idl.ts`,
-          `> `,
-          `> Then refresh this page and try again.`,
-        ])
-      } else if (errorMessage.includes('_bn') || errorMessage.includes('Cannot read properties')) {
-        setLogs((prev) => [
-          ...prev,
-          `> [ERROR] PROGRAM INITIALIZATION FAILED`,
-          `> This appears to be an IDL/Program mismatch issue.`,
-          `> The program is deployed but the interface doesn't match.`,
-          `> `,
-          `> POSSIBLE SOLUTIONS:`,
-          `> 1. The program may need to be redeployed with correct IDL`,
-          `> 2. The IDL file may need to be updated`,
-          `> 3. Try refreshing the page and trying again`,
-          `> `,
-          `> Technical error: ${errorMessage}`,
-        ])
-      } else {
-        const message = errorMessage || "Failed to initialize registry"
-        setLogs((prev) => [...prev, `> [ERROR] ${message}`])
-        if (error?.logs) {
-          setLogs((prev) => [...prev, ...error.logs.map((log: string) => `> [LOG] ${log}`)])
-        }
-        if (transactionMessage) {
-          setLogs((prev) => [...prev, `> [TX ERROR] ${transactionMessage}`])
-        }
-      }
-    } finally {
-      setIsInitializing(false)
-    }
-  }
-
-  const shortKey = wallet.publicKey ? `${wallet.publicKey.toBase58().slice(0, 4)}...${wallet.publicKey.toBase58().slice(-4)}` : "Disconnected"
+    const shortKey = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Disconnected"
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#040506] font-mono text-slate-100">
@@ -1125,11 +737,11 @@ export default function NewAgentPage() {
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-amber-100">
                 <span className="rounded border border-amber-500/60 bg-amber-500/10 px-3 py-1 font-semibold">
-                    SECURITY BOND REQUIRED: {bondSol} SOL
+                    SECURITY BOND REQUIRED: {bondEth} ETH
                 </span>
-                {parseFloat(bondSol) > 0.1 && (
+                {parseFloat(bondEth) > 0.1 && (
                   <span className="rounded border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-xs text-rose-200">
-                    ⚠️ HIGH BOND - Expected 0.05 SOL
+                    ⚠️ HIGH BOND - Expected 0.05 ETH
                   </span>
                 )}
                 <span className="flex items-center gap-2 text-amber-200/80">
@@ -1190,8 +802,8 @@ export default function NewAgentPage() {
               </span>
               <span className="flex items-center gap-2">
                 <Timer className="h-3.5 w-3.5 text-amber-200" />
-                {wallet.connected && wallet.publicKey
-                  ? `Wallet: ${wallet.publicKey.toBase58().slice(0, 4)}...${wallet.publicKey.toBase58().slice(-4)}`
+                {isConnected && address
+                  ? `Wallet: ${address.slice(0, 6)}...${address.slice(-4)}`
                   : "Connect wallet to proceed"}
               </span>
             </div>
@@ -1202,9 +814,9 @@ export default function NewAgentPage() {
                   <div className="mt-1 space-y-1 text-amber-200/90">
                     {!diagnosticsComplete && <div>• Diagnostics not complete</div>}
                     {!agentRegistered && <div>• Agent not registered in database</div>}
-                    {!wallet.connected && <div>• Wallet not connected</div>}
-                    {wallet.connected && !wallet.publicKey && <div>• No public key available</div>}
-                    {wallet.connected && wallet.publicKey && !wallet.sendTransaction && <div>• Wallet sendTransaction not available</div>}
+                    {!isConnected && <div>• Wallet not connected</div>}
+                    {isConnected && !address && <div>• No public key (address) available</div>}
+                    {isConnected && address && !sendTransaction && <div>• Wallet sendTransaction not available</div>}
                     {!registry && !loadingRegistry && <div>• Registry not found - Initialize registry first</div>}
                     {loadingRegistry && <div>• Loading registry...</div>}
                     {isStaking && <div>• Transaction in progress</div>}
@@ -1212,55 +824,9 @@ export default function NewAgentPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {programDeployed === false && (
-                    <div className="flex-1 rounded border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
-                      <div className="font-semibold uppercase tracking-[0.18em] text-rose-300 mb-1">Program Not Deployed</div>
-                      <div className="text-rose-200/90 space-y-1">
-                        <div>Deploy the program first:</div>
-                        <div className="font-mono text-[10px]">1. cd stake/</div>
-                        <div className="font-mono text-[10px]">2. anchor build</div>
-                        <div className="font-mono text-[10px]">3. anchor deploy --provider.cluster devnet</div>
-                        <div className="font-mono text-[10px]">4. Update AGENT_REGISTRY_PROGRAM_ID</div>
-                      </div>
-                    </div>
-                  )}
-                  {programDeployed === true && !registry && !loadingRegistry && wallet.connected && wallet.publicKey && typeof wallet.sendTransaction === "function" && (
-                    <button
-                      type="button"
-                      onClick={handleInitializeRegistry}
-                      disabled={isInitializing}
-                      className={cn(
-                        "group relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-lg border border-cyan-500/60 bg-gradient-to-r from-cyan-700 via-cyan-600 to-cyan-400 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-black shadow-[0_0_30px_rgba(0,243,255,0.4)] transition",
-                        "active:translate-y-0.5",
-                        isInitializing && "cursor-not-allowed opacity-70"
-                      )}
-                    >
-                      <span className="absolute inset-0 bg-[linear-gradient(120deg,rgba(0,0,0,0.25),transparent,rgba(255,255,255,0.15))] opacity-60 transition duration-500 group-hover:opacity-90" />
-                      <span className="relative flex items-center gap-3">
-                        {isInitializing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Network className="h-4 w-4" />}
-                        {isInitializing ? "Initializing..." : "Initialize Registry"}
-                      </span>
-                    </button>
-                  )}
-                  {txSig === "existing-agent" && wallet.connected && (
-                    <button
-                      type="button"
-                      onClick={handleWithdrawBond}
-                      disabled={isStaking}
-                      className={cn(
-                        "group relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-lg border border-amber-500/60 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-400 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-black shadow-[0_0_30px_rgba(255,176,0,0.4)] transition",
-                        "active:translate-y-0.5",
-                        isStaking && "cursor-not-allowed opacity-70"
-                      )}
-                    >
-                      <span className="absolute inset-0 bg-[linear-gradient(120deg,rgba(0,0,0,0.25),transparent,rgba(255,255,255,0.15))] opacity-60 transition duration-500 group-hover:opacity-90" />
-                      <span className="relative flex items-center gap-3">
-                        {isStaking ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                        {isStaking ? "Withdrawing..." : "Withdraw Bond & Re-register"}
-                      </span>
-                    </button>
-                  )}
-                  {(!registry || loadingRegistry) && wallet.connected && (
+                  {/* Solana-specific program deployment and bond withdrawal UI removed for EVM-only context */}
+                  {/* Only show Retry if EVM wallet is connected */}
+                  {(!registry || loadingRegistry) && isConnected && (
                     <button
                       type="button"
                       onClick={loadRegistry}

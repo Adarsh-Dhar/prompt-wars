@@ -3,8 +3,6 @@ import { ArrowRight, Zap, Eye, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FeaturedArenaCard } from "@/components/featured-arena-card"
 import { db } from "@/lib/db"
-import { getPrices } from "@/lib/solana/amm"
-
 // Default fallback stats when database is unavailable
 const DEFAULT_STATS = {
   stats: {
